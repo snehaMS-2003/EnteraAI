@@ -1,0 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased font-sans;
+    background-image: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.15) 0%, rgba(10, 10, 15, 1) 70%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  /* Force dark background and white text on native <select> option lists */
+  select option {
+    background-color: #0f0f18 !important;
+    color: #ffffff !important;
+    padding: 8px;
+  }
+
+  select option:hover,
+  select option:focus,
+  select option:checked {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.1)];
+  }
+  
+  .glass-card {
+    @apply glass rounded-2xl;
+  }
+  
+  .glass-input {
+    @apply bg-black/20 border border-white/10 rounded-lg focus:border-primary-500 focus:ring-1 focus:ring-primary-500 outline-none transition-all duration-300 text-white placeholder-gray-400;
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-purple-500;
+  }
+}
