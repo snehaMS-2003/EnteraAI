@@ -20,7 +20,7 @@ export function SysAdminOrganizationDetails() {
     setLoading(true);
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const response = await fetch(`http://localhost:5000/api/organizations/${id}`, {
+      const response = await fetch(`http://127.0.0.1:5000/api/organizations/${id}`, {
         headers: {
           'x-user-role': 'sys_admin'
         }
@@ -44,7 +44,7 @@ export function SysAdminOrganizationDetails() {
     try {
       const newStatus = org.status === 'active' ? 'inactive' : 'active';
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const response = await fetch(`http://localhost:5000/api/organizations/${id}/status`, {
+      const response = await fetch(`http://127.0.0.1:5000/api/organizations/${id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

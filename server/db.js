@@ -82,7 +82,30 @@ const initDB = async () => {
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         role VARCHAR(50) DEFAULT 'org_admin',
+        status VARCHAR(50) DEFAULT 'active',
+        last_active TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Ensure status and last_active columns exist for older users
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS invitation_token_hash TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS invitation_expires_at TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP;
+    `);
+
+    // Designer Applications Table (Many-to-Many mapping)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS designer_applications (
+        designer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (designer_id, application_id)
       );
     `);
 

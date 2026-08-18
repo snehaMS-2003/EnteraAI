@@ -14,18 +14,21 @@ export function OrgAdmin() {
     totalApplications: 0,
     activeApplications: 0,
     draftApplications: 0,
-    designers: 0
+    totalUsers: 0,
+    activeUsers: 0
   });
   
   const [recentApps, setRecentApps] = useState([]);
+  const [timeline, setTimeline] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [statsRes, appsRes] = await Promise.all([
+        const [statsRes, appsRes, activityRes] = await Promise.all([
           orgFetch('/api/orgadmin/stats'),
-          orgFetch('/api/org/applications')
+          orgFetch('/api/org/applications'),
+          orgFetch('/api/orgadmin/activity')
         ]);
         
         if (statsRes.ok) {
@@ -38,6 +41,11 @@ export function OrgAdmin() {
           // Display top 5 recent applications
           setRecentApps(appsData.slice(0, 5));
         }
+        
+        if (activityRes.ok) {
+          const actData = await activityRes.json();
+          setTimeline(actData.timeline || []);
+        }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
       } finally {
@@ -46,6 +54,9 @@ export function OrgAdmin() {
     };
     fetchDashboardData();
   }, []);
+
+  const maxActivity = Math.max(...timeline.map(d => Math.max(d.users, d.apps)), 10);
+  const chartHeight = 160;
 
   return (
     <div className="space-y-6">
@@ -105,9 +116,59 @@ export function OrgAdmin() {
               <Users className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-400">Designers</p>
-              <p className="text-2xl font-bold text-white">{stats.designers}</p>
+              <p className="text-sm font-medium text-gray-400">Users (Active/Total)</p>
+              <p className="text-2xl font-bold text-white">{stats.activeUsers} <span className="text-gray-500 text-lg">/ {stats.totalUsers}</span></p>
             </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Activity Chart */}
+      <div className="mt-8">
+        <h2 className="text-lg font-bold text-white mb-4">Organization Activity</h2>
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-gray-400 text-sm">Applications and Users created over the last 7 days</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs font-medium text-gray-400">
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-blue-500"></div> Applications</div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded bg-purple-500"></div> Users</div>
+            </div>
+          </div>
+          
+          <div className="relative pt-4 border-b border-white/10 pb-2">
+             <div className="absolute left-0 top-0 bottom-8 border-r border-white/10 pr-2 flex flex-col justify-between text-xs text-gray-500 w-8 text-right">
+                <span>{maxActivity}</span>
+                <span>{Math.round(maxActivity / 2)}</span>
+                <span>0</span>
+             </div>
+             
+             <div className="ml-10 flex items-end justify-between h-[160px]">
+                {timeline.map((day, i) => {
+                  const hApps = (day.apps / maxActivity) * chartHeight;
+                  const hUsers = (day.users / maxActivity) * chartHeight;
+                  const dateLabel = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+                  
+                  return (
+                    <div key={i} className="flex flex-col items-center group relative w-full px-1">
+                      <div className="flex items-end justify-center gap-1 w-full h-[160px]">
+                         <div className="w-1/3 max-w-[16px] bg-blue-500 rounded-t-sm relative transition-all duration-300 hover:opacity-80" style={{ height: `${hApps}px` }}>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-black text-xs text-white px-2 py-1 rounded">
+                              {day.apps} Apps
+                            </div>
+                         </div>
+                         <div className="w-1/3 max-w-[16px] bg-purple-500 rounded-t-sm relative transition-all duration-300 hover:opacity-80" style={{ height: `${hUsers}px` }}>
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block bg-black text-xs text-white px-2 py-1 rounded">
+                              {day.users} Users
+                            </div>
+                         </div>
+                      </div>
+                      <span className="text-xs text-gray-500 mt-2">{dateLabel}</span>
+                    </div>
+                  );
+                })}
+             </div>
           </div>
         </Card>
       </div>

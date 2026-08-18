@@ -9,15 +9,20 @@ import { DashboardLayout } from './components/layout/DashboardLayout';
 import { LandingPage } from './pages/LandingPage';
 import { Login } from './pages/Auth/Login';
 import { Register } from './pages/Auth/Register';
+import { AcceptInvite } from './pages/Auth/AcceptInvite';
 
 // Dashboards
 import { AppDesigner } from './pages/Dashboards/AppDesigner';
 import { OrgAdmin } from './pages/Dashboards/OrgAdmin';
 import { OrgApplications } from './pages/Dashboards/OrgApplications';
 import { OrgCreateApplication } from './pages/Dashboards/OrgCreateApplication';
+import { OrgApplicationDetails } from './pages/Dashboards/OrgApplicationDetails';
+import { OrgUsers } from './pages/Dashboards/OrgUsers';
+import { OrgProfile } from './pages/Dashboards/OrgProfile';
 import { SystemAdmin } from './pages/Dashboards/SystemAdmin';
 import { SysAdminOrganizations } from './pages/Dashboards/SysAdminOrganizations';
 import { SysAdminOrganizationDetails } from './pages/Dashboards/SysAdminOrganizationDetails';
+import { SysAdminUsers } from './pages/Dashboards/SysAdminUsers';
 import { CreateApplication } from './pages/Dashboards/CreateApplication';
 import { ConfigureApplication } from './pages/Dashboards/ConfigureApplication';
 
@@ -33,6 +38,7 @@ function App() {
         {/* Auth Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         
         {/* App Designer Dashboard */}
         <Route path="/dashboard/designer" element={<DashboardLayout role="designer" />}>
@@ -49,7 +55,9 @@ function App() {
           <Route index element={<OrgAdmin />} />
           <Route path="apps" element={<OrgApplications />} />
           <Route path="apps/create" element={<OrgCreateApplication />} />
-          <Route path="designers" element={<div className="text-white">Manage Designers (Coming Soon)</div>} />
+          <Route path="apps/:id" element={<OrgApplicationDetails />} />
+          <Route path="users" element={<OrgUsers />} />
+          <Route path="profile" element={<OrgProfile />} />
         </Route>
         
         {/* System Admin Dashboard */}
@@ -57,7 +65,7 @@ function App() {
           <Route index element={<SystemAdmin />} />
           <Route path="orgs" element={<SysAdminOrganizations />} />
           <Route path="orgs/:id" element={<SysAdminOrganizationDetails />} />
-          <Route path="users" element={<div className="text-white">Platform Users (Coming Soon)</div>} />
+          <Route path="users" element={<SysAdminUsers />} />
         </Route>
         
         {/* Fallback */}

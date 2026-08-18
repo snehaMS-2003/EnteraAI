@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Search, FolderKanban, Filter, Eye, Pencil, Archive,
+  Plus, Search, FolderKanban, Filter, Eye, Pencil, Archive, Trash2,
   AlertTriangle, X, ChevronDown, RefreshCw, Calendar, User,
   Layers, Tag, Server,
 } from 'lucide-react';
@@ -68,6 +68,45 @@ function ConfirmDialog({ app, onConfirm, onCancel }) {
   );
 }
 
+// ─── Delete confirmation dialog ─────────────────────────────────────────────
+function ConfirmDeleteDialog({ app, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="relative glass-card p-6 max-w-md w-full z-10"
+      >
+        <div className="flex items-start gap-4">
+          <div className="p-2 rounded-lg bg-red-500/20 text-red-400 shrink-0">
+            <Trash2 className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-1">Delete Application?</h3>
+            <p className="text-gray-400 text-sm">
+              Are you sure you want to permanently delete{' '}
+              <span className="text-white font-medium">{app.app_name}</span>?
+              This action cannot be undone and all associated data will be lost.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6 justify-end">
+          <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-500 border-red-500/50 shadow-none"
+            onClick={onConfirm}
+          >
+            Delete
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Format date ─────────────────────────────────────────────────────────────
 function fmt(dateStr) {
   if (!dateStr) return '—';
@@ -99,6 +138,10 @@ export function OrgApplications() {
   // archive dialog
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [archiving, setArchiving] = useState(false);
+
+  // delete dialog
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Redirect if not authenticated ──────────────────────────────────────────
   useEffect(() => {
@@ -152,6 +195,27 @@ export function OrgApplications() {
       setError(err.message);
     } finally {
       setArchiving(false);
+    }
+  };
+
+  // ── Delete handler ─────────────────────────────────────────────────────────
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await orgFetch(`/api/org/applications/${deleteTarget.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete application');
+      }
+      setDeleteTarget(null);
+      fetchApps();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -385,7 +449,7 @@ export function OrgApplications() {
                             <button
                               title="Edit"
                               className="p-1.5 rounded-lg text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
-                              onClick={() => navigate(`/dashboard/org-admin/apps/${app.id}/edit`)}
+                              onClick={() => navigate(`/dashboard/org-admin/apps/${app.id}`)}
                             >
                               <Pencil className="h-4 w-4" />
                             </button>
@@ -395,6 +459,13 @@ export function OrgApplications() {
                               onClick={() => setArchiveTarget(app)}
                             >
                               <Archive className="h-4 w-4" />
+                            </button>
+                            <button
+                              title="Delete"
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              onClick={() => setDeleteTarget(app)}
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         </td>
@@ -421,6 +492,13 @@ export function OrgApplications() {
             app={archiveTarget}
             onConfirm={handleArchive}
             onCancel={() => setArchiveTarget(null)}
+          />
+        )}
+        {deleteTarget && (
+          <ConfirmDeleteDialog
+            app={deleteTarget}
+            onConfirm={handleDelete}
+            onCancel={() => setDeleteTarget(null)}
           />
         )}
       </AnimatePresence>

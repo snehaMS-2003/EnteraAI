@@ -46,7 +46,7 @@ export function orgFetch(path, options = {}) {
     if (user.email)          headers['X-User-Email'] = user.email;
   }
 
-  return fetch(`http://localhost:5000${path}`, {
+  return fetch(`http://127.0.0.1:5000${path}`, {
     ...options,
     headers,
   });

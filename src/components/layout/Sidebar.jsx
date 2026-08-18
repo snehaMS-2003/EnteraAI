@@ -33,7 +33,8 @@ export function Sidebar({ role = 'designer' }) {
       return [
         { name: 'Dashboard', path: '/dashboard/org-admin', icon: LayoutDashboard },
         { name: 'Applications', path: '/dashboard/org-admin/apps', icon: FolderKanban },
-        { name: 'Designers', path: '/dashboard/org-admin/designers', icon: Users },
+        { name: 'Users', path: '/dashboard/org-admin/users', icon: Users },
+        { name: 'Organization Profile', path: '/dashboard/org-admin/profile', icon: Settings },
       ];
     }
     if (role === 'sys_admin') {

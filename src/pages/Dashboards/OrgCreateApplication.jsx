@@ -33,7 +33,7 @@ export function OrgCreateApplication() {
   const [form, setForm] = useState({
     appName: '',
     appDescription: '',
-    industry: '',
+    industry: user?.organizationIndustry || '',
     industryTemplate: '',
     businessModules: [],
   });
@@ -45,12 +45,20 @@ export function OrgCreateApplication() {
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
-        const [tplRes, modRes] = await Promise.all([
+        const [tplRes, modRes, orgRes] = await Promise.all([
           orgFetch('/api/templates'),
-          orgFetch('/api/modules')
+          orgFetch('/api/modules'),
+          orgFetch('/api/org/profile')
         ]);
         if (tplRes.ok) setTemplates(await tplRes.json());
         if (modRes.ok) setAvailableModules(await modRes.json());
+        if (orgRes.ok) {
+          const orgData = await orgRes.json();
+          setForm(prev => ({ ...prev, industry: orgData.industry || '' }));
+          if (!orgData.industry) {
+            setError('Your organization must have an Industry defined before creating an application.');
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch metadata:', err);
       }
@@ -86,7 +94,7 @@ export function OrgCreateApplication() {
   // Step 1: Save Basic Info
   const handleSaveBasicInfo = async () => {
     if (!form.appName || !form.industry) {
-      setError('Application Name and Industry are required.');
+      setError('Application Name is required. Your organization must also have an Industry defined.');
       return;
     }
     setLoading(true);
@@ -177,7 +185,7 @@ export function OrgCreateApplication() {
       if (!appRes.ok) throw new Error('Failed to finalize application');
 
       setCurrentStep(7);
-      setTimeout(() => navigate('/dashboard/org-admin/apps'), 2000);
+      setTimeout(() => navigate(`/dashboard/designer/apps/${appId}/configure`), 2000);
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -225,12 +233,17 @@ export function OrgCreateApplication() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-400 mb-1">Industry *</label>
+        <label className="block text-sm font-medium text-gray-400 mb-1">Industry</label>
         <Input 
-          placeholder="e.g. Healthcare" 
-          value={form.industry}
-          onChange={(e) => setForm({...form, industry: e.target.value})}
+          value={form.industry || 'No Industry Defined'}
+          disabled
+          className={`opacity-70 ${!form.industry ? 'text-red-400 border-red-500/50' : ''}`}
         />
+        {form.industry ? (
+          <p className="text-xs text-primary-400 mt-1">Automatically inherited from organization</p>
+        ) : (
+          <p className="text-xs text-red-500 mt-1">Organization must have an Industry defined.</p>
+        )}
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-400 mb-1">Organization</label>
@@ -239,31 +252,40 @@ export function OrgCreateApplication() {
     </div>
   );
 
-  const renderStep1 = () => (
-    <div className="space-y-4">
-      <h3 className="text-lg font-bold text-white mb-4">Select Template</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {templates.map(tpl => (
+  const renderStep1 = () => {
+    const industryTemplates = templates.filter(
+      tpl => tpl.industry?.toLowerCase() === form.industry?.toLowerCase()
+    );
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-white mb-4">Select Template</h3>
+        {industryTemplates.length === 0 && (
+          <p className="text-gray-400 text-sm mb-4">No predefined templates found for your industry. You can start from scratch.</p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {industryTemplates.map(tpl => (
+            <div 
+              key={tpl.id} 
+              onClick={() => setForm({...form, industryTemplate: tpl.name})}
+              className={`p-4 rounded-xl border cursor-pointer transition-colors ${form.industryTemplate === tpl.name ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 hover:border-white/20 bg-white/5'}`}
+            >
+              <h4 className="text-white font-medium">{tpl.name}</h4>
+              <p className="text-xs text-primary-400 mt-1">{tpl.industry}</p>
+              <p className="text-sm text-gray-400 mt-2">{tpl.description}</p>
+            </div>
+          ))}
           <div 
-            key={tpl.id} 
-            onClick={() => setForm({...form, industryTemplate: tpl.name})}
-            className={`p-4 rounded-xl border cursor-pointer transition-colors ${form.industryTemplate === tpl.name ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 hover:border-white/20 bg-white/5'}`}
-          >
-            <h4 className="text-white font-medium">{tpl.name}</h4>
-            <p className="text-xs text-primary-400 mt-1">{tpl.industry}</p>
-            <p className="text-sm text-gray-400 mt-2">{tpl.description}</p>
+              onClick={() => setForm({...form, industryTemplate: 'Start From Scratch'})}
+              className={`p-4 rounded-xl border cursor-pointer transition-colors ${form.industryTemplate === 'Start From Scratch' ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 hover:border-white/20 bg-white/5'}`}
+            >
+              <h4 className="text-white font-medium">Start From Scratch</h4>
+              <p className="text-sm text-gray-400 mt-2">Build your application from the ground up without a template.</p>
           </div>
-        ))}
-        <div 
-            onClick={() => setForm({...form, industryTemplate: 'Start From Scratch'})}
-            className={`p-4 rounded-xl border cursor-pointer transition-colors ${form.industryTemplate === 'Start From Scratch' ? 'border-primary-500 bg-primary-500/10' : 'border-white/10 hover:border-white/20 bg-white/5'}`}
-          >
-            <h4 className="text-white font-medium">Start From Scratch</h4>
-            <p className="text-sm text-gray-400 mt-2">Build your application from the ground up without a template.</p>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStep2 = () => (
     <div className="space-y-4">

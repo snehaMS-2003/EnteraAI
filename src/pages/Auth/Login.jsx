@@ -20,7 +20,7 @@ export function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch('http://127.0.0.1:5000/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -31,19 +31,23 @@ export function Login() {
       if (response.ok) {
         localStorage.setItem('user', JSON.stringify(data.user));
         const role = data.user?.role;
-        if (role === 'sys_admin' || email.includes('admin')) {
+        
+        if (role === 'sys_admin') {
           navigate('/dashboard/sys-admin');
-        } else if (role === 'org_admin' || email.includes('org')) {
+        } else if (role === 'org_admin') {
           navigate('/dashboard/org-admin');
+        } else if (role === 'lead_designer' || role === 'designer' || role === 'app_admin' || role === 'user') {
+          navigate('/dashboard/designer');
         } else {
-          navigate('/dashboard/org-admin');
+          // Fallback
+          navigate('/dashboard/designer');
         }
       } else {
-        setErrorMsg(data.error || 'Login failed. Please check your credentials.');
+        setErrorMsg(data.error || 'Invalid credentials');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setErrorMsg('Failed to connect to server');
+      setErrorMsg('Server unavailable');
     } finally {
       setLoading(false);
     }
