@@ -670,7 +670,7 @@ export function CreateApplication() {
           </div>
 
           <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => navigate('/dashboard/designer')}>
+            <Button variant="outline" onClick={() => navigate('/designer/dashboard')}>
               Return to Dashboard
             </Button>
             <Button variant="primary">

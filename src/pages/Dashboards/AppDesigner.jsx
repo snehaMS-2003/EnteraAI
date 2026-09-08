@@ -1,134 +1,187 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { 
-  FolderKanban, 
-  Workflow, 
-  Database, 
-  Network, 
-  Plus, 
-  Bot,
-  Activity
-} from 'lucide-react';
+import { LayoutDashboard, CheckCircle2, Clock, Activity, FileEdit, Database, Layers } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+import { Link } from 'react-router-dom';
 
 export function AppDesigner() {
-  const navigate = useNavigate();
-  const stats = [
-    { title: 'Total Applications', value: '12', icon: FolderKanban, color: 'text-blue-500' },
-    { title: 'Generated Workflows', value: '48', icon: Workflow, color: 'text-purple-500' },
-    { title: 'Database Schemas', value: '24', icon: Database, color: 'text-green-500' },
-    { title: 'Generated APIs', value: '156', icon: Network, color: 'text-orange-500' },
-  ];
+  const { user } = useAuth();
+  const [stats, setStats] = useState({
+    totalApplications: 0,
+    activeApplications: 0,
+    draftApplications: 0
+  });
+  const [recentApps, setRecentApps] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const recentApps = [
-    { name: 'Customer Portal', industry: 'Retail', template: 'B2C E-commerce', status: 'Deployed', date: '2026-07-25' },
-    { name: 'Inventory Manager', industry: 'Logistics', template: 'Internal Tool', status: 'Draft', date: '2026-07-26' },
-    { name: 'Patient Records', industry: 'Healthcare', template: 'HIPAA Compliant', status: 'Building', date: '2026-07-27' },
+  const basePath = user?.role === 'lead_designer' ? '/lead-designer/dashboard' : '/designer/dashboard';
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [statsRes, appsRes] = await Promise.all([
+          fetch('http://127.0.0.1:5000/api/designer/dashboard', {
+            headers: {
+              'x-org-id': user?.organizationId,
+              'x-user-id': user?.id,
+              'x-user-email': user?.email
+            }
+          }),
+          fetch('http://127.0.0.1:5000/api/designer/applications', {
+            headers: {
+              'x-org-id': user?.organizationId,
+              'x-user-id': user?.id,
+              'x-user-email': user?.email
+            }
+          })
+        ]);
+        
+        if (!statsRes.ok || !appsRes.ok) {
+          throw new Error('Failed to load dashboard data. The server might be unavailable.');
+        }
+
+        setStats(await statsRes.json());
+        
+        const appsData = await appsRes.json();
+        const sorted = appsData.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        setRecentApps(sorted.slice(0, 3));
+      } catch (err) {
+        console.error('Failed to fetch designer stats:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (user?.id) {
+      fetchData();
+    }
+  }, [user]);
+
+  const statCards = [
+    {
+      title: 'Assigned Applications',
+      value: stats.totalApplications,
+      icon: LayoutDashboard,
+      color: 'text-blue-500',
+      bg: 'bg-blue-500/10'
+    },
+    {
+      title: 'Active Applications',
+      value: stats.activeApplications,
+      icon: CheckCircle2,
+      color: 'text-green-500',
+      bg: 'bg-green-500/10'
+    },
+    {
+      title: 'Draft Applications',
+      value: stats.draftApplications,
+      icon: FileEdit,
+      color: 'text-amber-500',
+      bg: 'bg-amber-500/10'
+    }
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-white">Application Designer Dashboard</h1>
-          <p className="text-gray-400">Welcome back. Here's an overview of your projects.</p>
-        </div>
-        <div className="flex gap-4">
-          <Button variant="outline" className="gap-2">
-            <Bot className="h-4 w-4" />
-            AI Recommendation
-          </Button>
-          <Button className="gap-2" onClick={() => navigate('/dashboard/designer/apps/create')}>
-            <Plus className="h-4 w-4" />
-            Create Application
-          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">Designer Dashboard</h1>
+          <p className="text-gray-400 mt-1">
+            Welcome back, {user?.name}. You are viewing data for {user?.organizationName}.
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, idx) => (
-          <motion.div key={idx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}>
-            <Card className="flex items-center p-6 gap-4">
-              <div className={`p-3 rounded-xl bg-white/5 ${stat.color}`}>
-                <stat.icon className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-400">{stat.title}</p>
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
+      {error ? (
+        <Card className="p-6 bg-red-500/10 border-red-500/50">
+          <div className="flex flex-col items-center justify-center text-center space-y-4">
+            <Activity className="h-12 w-12 text-red-400" />
+            <div>
+              <h2 className="text-xl font-bold text-white">Dashboard Unavailable</h2>
+              <p className="text-red-400 text-sm mt-1">{error}</p>
+            </div>
+            <Button variant="outline" className="mt-4 border-red-500/50 text-red-400 hover:bg-red-500/20" onClick={() => window.location.reload()}>
+              Retry Connection
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {statCards.map((stat, idx) => (
+          <motion.div
+            key={stat.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.1 }}
+          >
+            <Card className="p-6 h-full flex flex-col justify-between hover:border-primary-500/30 transition-colors">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-400">{stat.title}</p>
+                  {loading ? (
+                    <div className="h-10 w-16 bg-gray-800 animate-pulse rounded mt-2"></div>
+                  ) : (
+                    <h3 className="text-4xl font-bold mt-2">{stat.value}</h3>
+                  )}
+                </div>
+                <div className={`p-3 rounded-xl ${stat.bg}`}>
+                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                </div>
               </div>
             </Card>
           </motion.div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
-        <div className="lg:col-span-2">
-          <Card className="h-full">
-            <h3 className="text-lg font-semibold mb-4 text-white">Recent Applications</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/10 text-gray-400 text-sm">
-                    <th className="pb-3 font-medium">Application Name</th>
-                    <th className="pb-3 font-medium">Industry</th>
-                    <th className="pb-3 font-medium">Template</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm text-gray-300">
-                  {recentApps.map((app, idx) => (
-                    <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                      <td className="py-4 font-medium text-white">{app.name}</td>
-                      <td className="py-4">{app.industry}</td>
-                      <td className="py-4 text-gray-400">{app.template}</td>
-                      <td className="py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          app.status === 'Deployed' ? 'bg-green-500/20 text-green-400' :
-                          app.status === 'Draft' ? 'bg-gray-500/20 text-gray-400' :
-                          'bg-blue-500/20 text-blue-400'
-                        }`}>
-                          {app.status}
-                        </span>
-                      </td>
-                      <td className="py-4">{app.date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <Activity className="h-5 w-5 text-primary-500" />
+            <h2 className="text-lg font-semibold">Quick Actions</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Link to={`${basePath}/apps`} className="flex flex-col items-center justify-center p-6 glass-card rounded-xl hover:bg-white/5 transition-colors text-center gap-3">
+              <Layers className="h-8 w-8 text-blue-400" />
+              <span className="font-medium">My Applications</span>
+            </Link>
+          </div>
+        </Card>
         
-        <div>
-          <Card className="h-full">
-            <h3 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary-500" />
-              Recent Activity
-            </h3>
-            <div className="space-y-6">
-              {[
-                { title: 'Workflow Generated', desc: 'Patient Records Application', time: '2 hours ago' },
-                { title: 'Schema Generated', desc: 'Inventory Manager', time: '5 hours ago' },
-                { title: 'API Generated', desc: 'Inventory Manager', time: '6 hours ago' },
-                { title: 'Deployment Completed', desc: 'Customer Portal', time: '1 day ago' },
-              ].map((activity, idx) => (
-                <div key={idx} className="flex gap-4 relative">
-                  {idx !== 3 && <div className="absolute left-1.5 top-6 bottom-[-24px] w-[1px] bg-white/10" />}
-                  <div className="h-3 w-3 mt-1.5 rounded-full bg-primary-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] flex-shrink-0" />
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <Clock className="h-5 w-5 text-primary-500" />
+            <h2 className="text-lg font-semibold">Recent Activity</h2>
+          </div>
+          <div className="flex flex-col gap-4">
+            {loading ? (
+              <div className="flex justify-center p-4">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"></div>
+              </div>
+            ) : recentApps.length > 0 ? (
+              recentApps.map(app => (
+                <div key={app.id} className="flex items-center justify-between p-3 glass-card rounded-lg border border-white/5">
                   <div>
-                    <p className="text-sm font-medium text-white">{activity.title}</p>
-                    <p className="text-xs text-gray-400 mt-1">{activity.desc}</p>
-                    <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
+                    <h4 className="font-medium text-white">{app.app_name}</h4>
+                    <p className="text-xs text-gray-400">Updated {new Date(app.updated_at).toLocaleDateString()}</p>
                   </div>
+                  <Link to={`${basePath}/apps/${app.id}/workflow/basic`}>
+                    <Button variant="outline" size="sm" className="h-8">Open</Button>
+                  </Link>
                 </div>
-              ))}
-            </div>
-          </Card>
-        </div>
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center h-40 text-gray-500">
+                <p>No recent activity</p>
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
+      </>
+      )}
     </div>
   );
 }
