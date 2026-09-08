@@ -13,6 +13,7 @@ const Button = React.forwardRef(({ className, variant = 'primary', size = 'defau
     secondary: 'bg-white/10 hover:bg-white/20 text-white border border-white/10 backdrop-blur-sm',
     outline: 'border border-primary-500/50 text-primary-400 hover:bg-primary-500/10',
     ghost: 'text-gray-300 hover:text-white hover:bg-white/10',
+    destructive: 'bg-red-600 hover:bg-red-500 text-white border border-red-500/50 focus-visible:ring-red-500 shadow-none',
   };
 
   const sizes = {

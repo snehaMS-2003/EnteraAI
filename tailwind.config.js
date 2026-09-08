@@ -9,6 +9,14 @@ export default {
       colors: {
         background: '#0a0a0f',
         foreground: '#ffffff',
+        dark: {
+          100: '#3f3f46',
+          200: '#27272a',
+          300: '#18181b',
+          400: '#0f0f18',
+          500: '#0a0a0f',
+          600: '#000000',
+        },
         primary: {
           50: '#f0f3ff',
           100: '#e0e7ff',

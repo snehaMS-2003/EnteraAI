@@ -23,28 +23,46 @@ export function Sidebar({ role = 'designer' }) {
   const getLinksByRole = () => {
     if (role === 'designer') {
       return [
-        { name: 'Dashboard', path: '/dashboard/designer', icon: LayoutDashboard },
-        { name: 'My Applications', path: '/dashboard/designer/apps', icon: FolderKanban },
-        { name: 'Database Schemas', path: '/dashboard/designer/schemas', icon: Database },
-        { name: 'REST APIs', path: '/dashboard/designer/apis', icon: Network },
+        { name: 'Dashboard', path: '/designer/dashboard', icon: LayoutDashboard },
+        { name: 'My Applications', path: '/designer/dashboard/apps', icon: FolderKanban },
+        { name: 'Database Schemas', path: '/designer/dashboard/database-schemas', icon: Database },
+        { name: 'REST APIs', path: '/designer/dashboard/apis', icon: Network },
+      ];
+    }
+    if (role === 'lead_designer') {
+      return [
+        { name: 'Dashboard', path: '/lead-designer/dashboard', icon: LayoutDashboard },
+        { name: 'Applications', path: '/lead-designer/dashboard/apps', icon: FolderKanban },
+        { name: 'Database Schemas', path: '/lead-designer/dashboard/database-schemas', icon: Database },
+        { name: 'REST APIs', path: '/lead-designer/dashboard/apis', icon: Network },
       ];
     }
     if (role === 'org_admin') {
       return [
-        { name: 'Dashboard', path: '/dashboard/org-admin', icon: LayoutDashboard },
-        { name: 'Applications', path: '/dashboard/org-admin/apps', icon: FolderKanban },
-        { name: 'Users', path: '/dashboard/org-admin/users', icon: Users },
-        { name: 'Organization Profile', path: '/dashboard/org-admin/profile', icon: Settings },
+        { name: 'Dashboard', path: '/org-admin/dashboard', icon: LayoutDashboard },
+        { name: 'Applications', path: '/org-admin/dashboard/apps', icon: FolderKanban },
+        { name: 'Database Schemas', path: '/org-admin/dashboard/database-schemas', icon: Database },
+        { name: 'REST APIs', path: '/org-admin/dashboard/apis', icon: Network },
+        { name: 'Users', path: '/org-admin/dashboard/users', icon: Users },
+        { name: 'Organization Profile', path: '/org-admin/dashboard/profile', icon: Settings },
       ];
     }
     if (role === 'sys_admin') {
       return [
-        { name: 'Overview', path: '/dashboard/sys-admin', icon: LayoutDashboard },
-        { name: 'Organizations', path: '/dashboard/sys-admin/orgs', icon: Users },
-        { name: 'Platform Users', path: '/dashboard/sys-admin/users', icon: Users },
+        { name: 'Overview', path: '/admin/dashboard', icon: LayoutDashboard },
+        { name: 'Organizations', path: '/admin/dashboard/orgs', icon: Users },
+        { name: 'Platform Users', path: '/admin/dashboard/users', icon: Users },
       ];
     }
     return [];
+  };
+
+  const getSettingsPath = () => {
+    if (role === 'designer') return '/designer/dashboard/settings';
+    if (role === 'lead_designer') return '/lead-designer/dashboard/settings';
+    if (role === 'org_admin') return '/org-admin/dashboard/settings';
+    if (role === 'sys_admin') return '/admin/dashboard/settings';
+    return '/settings';
   };
 
   const links = getLinksByRole();
@@ -81,7 +99,7 @@ export function Sidebar({ role = 'designer' }) {
       
       <div className="p-4 border-t border-white/10 space-y-1">
         <NavLink 
-          to="/settings"
+          to={getSettingsPath()}
           className="flex items-center px-3 py-2 text-sm font-medium rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
         >
           <Settings className="mr-3 h-5 w-5" />
