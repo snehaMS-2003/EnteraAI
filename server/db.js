@@ -134,6 +134,16 @@ const initDB = async () => {
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false`);
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE`);
+    
+    // Enforce one application per organization
+    try {
+      await client.query(`ALTER TABLE applications ADD CONSTRAINT unique_org_app UNIQUE (organization_id)`);
+    } catch (e) {
+      // Ignore if constraint already exists (error code 42710)
+      if (e.code !== '42710') {
+        console.warn('Could not add unique_org_app constraint:', e.message);
+      }
+    }
 
 
     // Templates Table

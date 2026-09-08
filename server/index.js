@@ -49,6 +49,12 @@ app.post('/api/register', async (req, res) => {
 
     const pool = getDB();
 
+    // Check if an organization already exists (single organization limit)
+    const orgCountRes = await pool.query('SELECT COUNT(*) FROM organizations');
+    if (parseInt(orgCountRes.rows[0].count) >= 1) {
+      return res.status(409).json({ error: 'Only one organization is allowed.' });
+    }
+
     // Check if email already exists in organizations or users
     const existingOrg = await pool.query('SELECT id FROM organizations WHERE LOWER(email) = LOWER($1)', [email]);
     if (existingOrg.rows.length > 0) {
@@ -167,19 +173,22 @@ app.post('/api/login', async (req, res) => {
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Incorrect email or password.' });
+    }
+
+    if (user.status === 'pending') {
+      return res.status(403).json({ error: 'Your account is pending approval.' });
+    }
+    if (user.status === 'invited') {
+      return res.status(403).json({ error: 'Your account is invited but not activated. Please accept your invitation first.' });
+    }
+    if (user.status === 'inactive') {
+      return res.status(403).json({ error: 'Your account is inactive. Contact your organization administrator.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    if (user.status === 'pending' || user.status === 'invited') {
-      return res.status(403).json({ error: 'Account not activated' });
-    }
-    if (user.status === 'inactive') {
-      return res.status(403).json({ error: 'Account deactivated' });
+      return res.status(401).json({ error: 'Incorrect email or password.' });
     }
 
     console.log(`[SUCCESS] User "${user.email}" logged in successfully as "${user.role}"`);
@@ -326,6 +335,80 @@ function requireOrgAuth(req, res, next) {
   next();
 }
 
+// Role-based auth middlewares
+function requireSysAdmin(req, res, next) {
+  // In a real app with JWTs, we'd verify the role from the token. 
+  // Here we can check if the user is admin@gmail.com or fetch the user from DB.
+  // For Phase 1, we expect frontend to only allow sys_admin to call these, but we can enforce it.
+  const userEmail = req.headers['x-user-email'];
+  if (userEmail !== 'admin@gmail.com') {
+    return res.status(403).json({ error: 'Forbidden: requires sys_admin role' });
+  }
+  next();
+}
+
+async function requireOrgAdmin(req, res, next) {
+  requireOrgAuth(req, res, async () => {
+    try {
+      const pool = require('./db').getDB();
+      const userRes = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+      if (userRes.rows.length === 0) {
+        // Fallback: check if it's the org admin in organizations table
+        const orgRes = await pool.query('SELECT email FROM organizations WHERE id = $1', [req.orgId]);
+        if (orgRes.rows.length === 0 || orgRes.rows[0].email !== req.userEmail) {
+          return res.status(403).json({ error: 'Forbidden: requires org_admin role' });
+        }
+      } else if (userRes.rows[0].role !== 'org_admin' && userRes.rows[0].role !== 'sys_admin') {
+        return res.status(403).json({ error: 'Forbidden: requires org_admin role' });
+      }
+      next();
+    } catch (err) {
+      res.status(500).json({ error: 'Auth check failed' });
+    }
+  });
+}
+
+async function requireDesigner(req, res, next) {
+  requireOrgAuth(req, res, async () => {
+    try {
+      const pool = require('./db').getDB();
+      const userRes = await pool.query('SELECT role FROM users WHERE id = $1 AND status = $2', [req.userId, 'active']);
+      if (userRes.rows.length === 0) {
+        return res.status(403).json({ error: 'Forbidden: active user not found' });
+      }
+      const role = userRes.rows[0].role;
+      if (role !== 'designer' && role !== 'lead_designer' && role !== 'org_admin' && role !== 'sys_admin') {
+        return res.status(403).json({ error: 'Forbidden: requires designer role' });
+      }
+      req.userRole = role; // attach for downstream route logic
+      next();
+    } catch (err) {
+      res.status(500).json({ error: 'Auth check failed' });
+    }
+  });
+}
+
+async function requireLeadDesigner(req, res, next) {
+  requireOrgAuth(req, res, async () => {
+    try {
+      const pool = require('./db').getDB();
+      const userRes = await pool.query('SELECT role FROM users WHERE id = $1 AND status = $2', [req.userId, 'active']);
+      if (userRes.rows.length === 0) {
+        return res.status(403).json({ error: 'Forbidden: active user not found' });
+      }
+      const role = userRes.rows[0].role;
+      if (role !== 'lead_designer' && role !== 'org_admin' && role !== 'sys_admin') {
+        return res.status(403).json({ error: 'Forbidden: requires lead_designer role' });
+      }
+      req.userRole = role;
+      next();
+    } catch (err) {
+      res.status(500).json({ error: 'Auth check failed' });
+    }
+  });
+}
+
+
 // GET /api/org/applications — list all non-archived apps for the authenticated org
 app.get('/api/org/applications', requireOrgAuth, async (req, res) => {
   try {
@@ -374,7 +457,7 @@ app.get('/api/org/profile', requireOrgAuth, async (req, res) => {
 });
 
 // GET /api/orgadmin/stats — org dashboard stats
-app.get('/api/orgadmin/stats', requireOrgAuth, async (req, res) => {
+app.get('/api/orgadmin/stats', requireOrgAdmin, async (req, res) => {
   try {
     const pool = getDB();
     const result = await pool.query(`
@@ -407,7 +490,7 @@ app.get('/api/orgadmin/stats', requireOrgAuth, async (req, res) => {
 });
 
 // GET /api/orgadmin/activity — org dashboard timeline activity
-app.get('/api/orgadmin/activity', requireOrgAuth, async (req, res) => {
+app.get('/api/orgadmin/activity', requireOrgAdmin, async (req, res) => {
   try {
     const pool = getDB();
     const appsActivity = await pool.query(`
@@ -448,6 +531,103 @@ app.get('/api/orgadmin/activity', requireOrgAuth, async (req, res) => {
   }
 });
 
+// GET /api/designer/dashboard — designer dashboard stats
+app.get('/api/designer/dashboard', requireDesigner, async (req, res) => {
+  try {
+    const pool = getDB();
+    let result;
+    
+    if (req.userRole === 'lead_designer' || req.userRole === 'org_admin' || req.userRole === 'sys_admin') {
+      // Lead Designer sees all apps in the org
+      result = await pool.query(`
+        SELECT 
+          COUNT(*) as total, 
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active, 
+          SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft
+        FROM applications 
+        WHERE organization_id = $1 AND archived = false
+      `, [req.orgId]);
+    } else {
+      // Normal Designer sees ONLY assigned apps
+      result = await pool.query(`
+        SELECT 
+          COUNT(*) as total, 
+          SUM(CASE WHEN a.status = 'active' THEN 1 ELSE 0 END) as active, 
+          SUM(CASE WHEN a.status = 'draft' THEN 1 ELSE 0 END) as draft
+        FROM applications a
+        JOIN designer_applications da ON a.id = da.application_id
+        WHERE a.organization_id = $1 AND da.designer_id = $2 AND a.archived = false
+      `, [req.orgId, req.userId]);
+    }
+
+    res.json({
+      totalApplications: parseInt(result.rows[0].total || 0),
+      activeApplications: parseInt(result.rows[0].active || 0),
+      draftApplications: parseInt(result.rows[0].draft || 0)
+    });
+  } catch (error) {
+    console.error('Fetch designer dashboard stats error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications — designer assigned apps list
+app.get('/api/designer/applications', requireDesigner, async (req, res) => {
+  try {
+    const pool = getDB();
+    let result;
+    
+    if (req.userRole === 'lead_designer' || req.userRole === 'org_admin' || req.userRole === 'sys_admin') {
+      // Lead Designer sees all apps in the org
+      result = await pool.query(`
+        SELECT * FROM applications 
+        WHERE organization_id = $1 AND archived = false 
+        ORDER BY created_at DESC
+      `, [req.orgId]);
+    } else {
+      // Normal Designer sees ONLY assigned apps
+      result = await pool.query(`
+        SELECT a.*, da.assigned_at FROM applications a
+        JOIN designer_applications da ON a.id = da.application_id
+        WHERE a.organization_id = $1 AND da.designer_id = $2 AND a.archived = false
+        ORDER BY a.created_at DESC
+      `, [req.orgId, req.userId]);
+    }
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch designer applications error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications/:id — get single assigned app
+app.get('/api/designer/applications/:id', requireDesigner, async (req, res) => {
+  try {
+    const pool = getDB();
+    let result;
+    
+    if (req.userRole === 'lead_designer' || req.userRole === 'org_admin' || req.userRole === 'sys_admin') {
+      result = await pool.query(
+        'SELECT * FROM applications WHERE id = $1 AND organization_id = $2 AND archived = false',
+        [req.params.id, req.orgId]
+      );
+    } else {
+      result = await pool.query(`
+        SELECT a.* FROM applications a
+        JOIN designer_applications da ON a.id = da.application_id
+        WHERE a.id = $1 AND a.organization_id = $2 AND da.designer_id = $3 AND a.archived = false
+      `, [req.params.id, req.orgId, req.userId]);
+    }
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Application not found or access denied' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Fetch single designer application error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/org/applications/:id — get single app (org-scoped)
 app.get('/api/org/applications/:id', requireOrgAuth, async (req, res) => {
   try {
@@ -479,6 +659,13 @@ app.post('/api/org/applications', requireOrgAuth, async (req, res) => {
     }
 
     const pool = getDB();
+    
+    // Check if the organization already has an application
+    const appCountResult = await pool.query('SELECT COUNT(*) FROM applications WHERE organization_id = $1', [req.orgId]);
+    if (parseInt(appCountResult.rows[0].count) >= 1) {
+      return res.status(409).json({ error: 'Your organization already has an application. Only one application per organization is allowed.' });
+    }
+    
     // Look up the org name for denormalized storage
     const orgResult = await pool.query('SELECT name FROM organizations WHERE id = $1', [req.orgId]);
     const orgName = orgResult.rows[0]?.name || null;
@@ -583,6 +770,13 @@ app.patch('/api/org/applications/:id/archive', requireOrgAuth, async (req, res) 
 app.delete('/api/org/applications/:id', requireOrgAuth, async (req, res) => {
   try {
     const pool = getDB();
+    
+    // Delete dependent records first to avoid foreign key constraint errors
+    await pool.query('DELETE FROM application_modules WHERE application_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM database_schemas WHERE application_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM apis WHERE application_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM deployments WHERE application_id = $1', [req.params.id]);
+    
     const result = await pool.query(
       'DELETE FROM applications WHERE id = $1 AND organization_id = $2 RETURNING *',
       [req.params.id, req.orgId]
@@ -763,8 +957,8 @@ app.get('/api/org/users', requireOrgAuth, async (req, res) => {
 // POST /api/org/users
 app.post('/api/org/users', requireOrgAuth, async (req, res) => {
   try {
-    const { name, email, role, applications } = req.body;
-    if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
+    const { name, email, role, applications, password } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' });
     
     const pool = getDB();
     const client = await pool.connect();
@@ -772,11 +966,11 @@ app.post('/api/org/users', requireOrgAuth, async (req, res) => {
       await client.query('BEGIN');
       
       const salt = await bcrypt.genSalt(10);
-      const password_hash = await bcrypt.hash('entera123!', salt);
+      const password_hash = await bcrypt.hash(password, salt);
       
       const userRes = await client.query(
-        `INSERT INTO users (organization_id, name, email, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id, name, email, role, status`,
+        `INSERT INTO users (organization_id, name, email, password_hash, role, status, activated_at)
+         VALUES ($1, $2, $3, $4, $5, 'active', CURRENT_TIMESTAMP) RETURNING id, name, email, role, status`,
         [req.orgId, name, email, password_hash, role || 'user']
       );
       
@@ -1251,6 +1445,24 @@ app.get('/api/sysadmin/users', requireSysAdminAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/sysadmin/users/:id
+app.delete('/api/sysadmin/users/:id', requireSysAdminAuth, async (req, res) => {
+  try {
+    const pool = getDB();
+    const userId = req.params.id;
+    // Prevent sysadmin from deleting themselves
+    const checkRes = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (checkRes.rows[0]?.role === 'sys_admin') {
+      return res.status(403).json({ error: 'Cannot delete system administrators' });
+    }
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete sysadmin user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.get('/api/organizations', async (req, res) => {
   try {
     const role = req.headers['x-user-role'];
@@ -1321,6 +1533,367 @@ app.patch('/api/organizations/:id/status', requireSysAdminAuth, async (req, res)
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Update organization status error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// ─── Phase 1 Application Designer APIs ──────────────────────────────────────
+
+// Auth middleware for Designer
+async function requireDesignerAuth(req, res, next) {
+  const orgId = parseInt(req.headers['x-org-id'], 10);
+  const userId = req.headers['x-user-id'];
+  
+  if (!orgId || !userId) {
+    return res.status(401).json({ error: 'Unauthorized: missing context' });
+  }
+  
+  try {
+    const pool = getDB();
+    const userQuery = await pool.query('SELECT role, status FROM users WHERE id = $1 AND organization_id = $2', [userId, orgId]);
+    if (userQuery.rows.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized: invalid user or organization' });
+    }
+    const user = userQuery.rows[0];
+    if (user.status !== 'active') {
+      return res.status(403).json({ error: 'Account is not active' });
+    }
+    // Allow lead_designer, designer, and org_admin, sys_admin
+    if (!['lead_designer', 'designer', 'org_admin', 'sys_admin'].includes(user.role)) {
+       return res.status(403).json({ error: 'Forbidden: Insufficient role permissions' });
+    }
+    
+    req.orgId = orgId;
+    req.userId = userId;
+    req.userRole = user.role;
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error during auth' });
+  }
+}
+
+// Middleware to check if designer is assigned to the application
+async function checkDesignerAppAccess(req, res, next) {
+  const appId = req.params.id;
+  const pool = getDB();
+  try {
+    // Check if app belongs to org
+    const appQuery = await pool.query('SELECT id FROM applications WHERE id = $1 AND organization_id = $2', [appId, req.orgId]);
+    if (appQuery.rows.length === 0) {
+      return res.status(404).json({ error: 'Application not found or access denied' });
+    }
+
+    // Lead designers, org_admins, and sys_admins can access any app in their org (or globally for sys_admin but here orgId is enforced)
+    if (['lead_designer', 'org_admin', 'sys_admin'].includes(req.userRole)) {
+      return next();
+    }
+
+    // Regular designers must be assigned
+    const assignedQuery = await pool.query(
+      'SELECT * FROM designer_applications WHERE designer_id = $1 AND application_id = $2',
+      [req.userId, appId]
+    );
+    
+    if (assignedQuery.rows.length === 0) {
+      return res.status(403).json({ error: 'Forbidden: You are not assigned to this application' });
+    }
+    
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error during access check' });
+  }
+}
+
+// GET /api/designer/dashboard
+app.get('/api/designer/dashboard', requireDesignerAuth, async (req, res) => {
+  try {
+    const pool = getDB();
+    let query, values;
+    
+    if (['lead_designer', 'org_admin', 'sys_admin'].includes(req.userRole)) {
+      query = `
+        SELECT 
+          COUNT(*) as total, 
+          SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active, 
+          SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft
+        FROM applications 
+        WHERE organization_id = $1 AND archived = false
+      `;
+      values = [req.orgId];
+    } else {
+      query = `
+        SELECT 
+          COUNT(*) as total, 
+          SUM(CASE WHEN a.status = 'active' THEN 1 ELSE 0 END) as active, 
+          SUM(CASE WHEN a.status = 'draft' THEN 1 ELSE 0 END) as draft
+        FROM applications a
+        JOIN designer_applications da ON a.id = da.application_id
+        WHERE a.organization_id = $1 AND da.designer_id = $2 AND a.archived = false
+      `;
+      values = [req.orgId, req.userId];
+    }
+
+    const result = await pool.query(query, values);
+    
+    // Recent activity (dummy or real)
+    res.json({
+      totalApplications: parseInt(result.rows[0].total || 0),
+      activeApplications: parseInt(result.rows[0].active || 0),
+      draftApplications: parseInt(result.rows[0].draft || 0),
+      recentActivity: []
+    });
+  } catch (error) {
+    console.error('Fetch designer dashboard error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications
+app.get('/api/designer/applications', requireDesignerAuth, async (req, res) => {
+  try {
+    const pool = getDB();
+    let query, values;
+
+    if (['lead_designer', 'org_admin', 'sys_admin'].includes(req.userRole)) {
+      query = `SELECT * FROM applications WHERE organization_id = $1 AND archived = false ORDER BY updated_at DESC`;
+      values = [req.orgId];
+    } else {
+      query = `
+        SELECT a.* 
+        FROM applications a
+        JOIN designer_applications da ON a.id = da.application_id
+        WHERE a.organization_id = $1 AND da.designer_id = $2 AND a.archived = false
+        ORDER BY a.updated_at DESC
+      `;
+      values = [req.orgId, req.userId];
+    }
+
+    const result = await pool.query(query, values);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch designer applications error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications/:id
+app.get('/api/designer/applications/:id', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const result = await pool.query('SELECT * FROM applications WHERE id = $1', [req.params.id]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/designer/applications/:id
+app.put('/api/designer/applications/:id', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const { app_name, app_description, industry_template, deployment_type, status } = req.body;
+    const result = await pool.query(
+      `UPDATE applications SET
+         app_name = COALESCE($1, app_name),
+         app_description = COALESCE($2, app_description),
+         industry_template = COALESCE($3, industry_template),
+         deployment_type = COALESCE($4, deployment_type),
+         status = COALESCE($5, status),
+         updated_at = NOW()
+       WHERE id = $6 RETURNING *`,
+      [app_name, app_description, industry_template, deployment_type, status, req.params.id]
+    );
+    res.json({ message: 'Application updated', application: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications/:id/modules
+app.get('/api/designer/applications/:id/modules', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const result = await pool.query('SELECT * FROM application_modules WHERE application_id = $1', [req.params.id]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/designer/applications/:id/modules
+app.put('/api/designer/applications/:id/modules', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const { modules } = req.body; // array of { module_id, is_enabled, config }
+    const appId = req.params.id;
+    
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Clear existing modules for this app
+      await client.query('DELETE FROM application_modules WHERE application_id = $1', [appId]);
+      
+      // Insert new
+      if (modules && modules.length > 0) {
+        for (const mod of modules) {
+          await client.query(
+            'INSERT INTO application_modules (application_id, module_id, is_enabled, config) VALUES ($1, $2, $3, $4)',
+            [appId, mod.module_id, mod.is_enabled !== false, mod.config ? JSON.stringify(mod.config) : null]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+    
+    res.json({ message: 'Modules updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications/:id/schema
+app.get('/api/designer/applications/:id/schema', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const result = await pool.query('SELECT schema_data FROM database_schemas WHERE application_id = $1', [req.params.id]);
+    res.json(result.rows.length > 0 ? result.rows[0].schema_data : { tables: [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/designer/applications/:id/schema
+app.put('/api/designer/applications/:id/schema', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const { schema_data } = req.body;
+    const appId = req.params.id;
+    
+    const existing = await pool.query('SELECT id FROM database_schemas WHERE application_id = $1', [appId]);
+    if (existing.rows.length > 0) {
+      await pool.query('UPDATE database_schemas SET schema_data = $1 WHERE application_id = $2', [JSON.stringify(schema_data), appId]);
+    } else {
+      await pool.query('INSERT INTO database_schemas (application_id, schema_data) VALUES ($1, $2)', [appId, JSON.stringify(schema_data)]);
+    }
+    res.json({ message: 'Schema updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/designer/applications/:id/apis
+app.get('/api/designer/applications/:id/apis', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const result = await pool.query('SELECT api_data FROM apis WHERE application_id = $1', [req.params.id]);
+    res.json(result.rows.length > 0 ? result.rows[0].api_data : { endpoints: [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/designer/applications/:id/apis
+app.put('/api/designer/applications/:id/apis', requireDesignerAuth, checkDesignerAppAccess, async (req, res) => {
+  try {
+    const pool = getDB();
+    const { api_data } = req.body;
+    const appId = req.params.id;
+    
+    const existing = await pool.query('SELECT id FROM apis WHERE application_id = $1', [appId]);
+    if (existing.rows.length > 0) {
+      await pool.query('UPDATE apis SET api_data = $1 WHERE application_id = $2', [JSON.stringify(api_data), appId]);
+    } else {
+      await pool.query('INSERT INTO apis (application_id, api_data) VALUES ($1, $2)', [appId, JSON.stringify(api_data)]);
+    }
+    res.json({ message: 'APIs updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Change Password ────────────────────────────────────────────────────────
+// GET /api/users/profile — get authenticated user profile details
+app.get('/api/users/profile', async (req, res) => {
+  try {
+    const email = req.header('X-User-Email');
+    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+
+    const pool = getDB();
+    
+    // Search in users table first
+    let userQuery = await pool.query(
+      `SELECT u.id, u.name, u.email, u.role, u.status, o.name as organization_name 
+       FROM users u 
+       LEFT JOIN organizations o ON u.organization_id = o.id 
+       WHERE LOWER(u.email) = LOWER($1)`,
+      [email]
+    );
+    
+    let user = userQuery.rows[0];
+
+    // Fallback to organizations table (for org_admin/sys_admin before they are migrated to users)
+    if (!user) {
+      const orgQuery = await pool.query('SELECT id, admin_name as name, email, name as organization_name FROM organizations WHERE LOWER(email) = LOWER($1)', [email]);
+      if (orgQuery.rows.length > 0) {
+        const org = orgQuery.rows[0];
+        user = {
+          id: org.id,
+          name: org.name,
+          email: org.email,
+          role: org.email === 'admin@gmail.com' ? 'sys_admin' : 'org_admin',
+          status: 'active',
+          organization_name: org.organization_name
+        };
+      }
+    }
+
+    if (user && user.email === 'admin@gmail.com') {
+      user.role = 'sys_admin';
+      user.organization_name = 'Entera.ai Platform';
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'User profile not found' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Fetch user profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/users/change-password', requireOrgAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new passwords are required' });
+    }
+    
+    const pool = getDB();
+    const userQuery = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
+    if (userQuery.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    
+    const user = userQuery.rows[0];
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) return res.status(401).json({ error: 'Incorrect current password' });
+    
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+    
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, req.userId]);
+    
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
