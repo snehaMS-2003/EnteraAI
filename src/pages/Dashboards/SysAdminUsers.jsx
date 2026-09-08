@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, Filter, Eye, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Users, Search, Filter, Eye, ShieldAlert, CheckCircle2, Trash2 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -55,6 +55,29 @@ export function SysAdminUsers() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    if (!window.confirm(`Are you sure you want to delete the user "${userName}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/sysadmin/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'x-user-role': 'sys_admin' }
+      });
+      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to delete user');
+      }
+      
+      // Update state locally
+      setUsers(users.filter(u => u.id !== userId));
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -153,9 +176,20 @@ export function SysAdminUsers() {
                           <div className="h-9 w-9 rounded-full bg-primary-500/20 text-primary-400 flex items-center justify-center font-bold">
                             {u.name.charAt(0).toUpperCase()}
                           </div>
-                          <div>
-                            <p className="font-medium text-white">{u.name}</p>
-                            <p className="text-xs text-gray-500">{u.email}</p>
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <p className="font-medium text-white">{u.name}</p>
+                              <p className="text-xs text-gray-500">{u.email}</p>
+                            </div>
+                            {u.role !== 'sys_admin' && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.id, u.name); }}
+                                className="p-1 text-red-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-500/10 ml-2" 
+                                title="Delete User"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>

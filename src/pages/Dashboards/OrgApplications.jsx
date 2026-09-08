@@ -96,7 +96,7 @@ function ConfirmDeleteDialog({ app, onConfirm, onCancel }) {
           <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
           <Button
             size="sm"
-            className="bg-red-600 hover:bg-red-500 border-red-500/50 shadow-none"
+            variant="destructive"
             onClick={onConfirm}
           >
             Delete
@@ -236,13 +236,15 @@ export function OrgApplications() {
             Manage and configure your organization's applications.
           </p>
         </div>
-        <Button
-          className="gap-2 self-start sm:self-auto"
-          onClick={() => navigate('/dashboard/org-admin/apps/create')}
-        >
-          <Plus className="h-4 w-4" />
-          Create Application
-        </Button>
+        {!loading && apps.length === 0 && (
+          <Button
+            className="gap-2 self-start sm:self-auto"
+            onClick={() => navigate('/org-admin/dashboard/apps/create')}
+          >
+            <Plus className="h-4 w-4" />
+            Create Application
+          </Button>
+        )}
       </div>
 
       {/* ── Error banner ─────────────────────────────────────────────────── */}
@@ -337,7 +339,7 @@ export function OrgApplications() {
             {!search && statusFilter === 'all' && industryFilter === 'all' && (
               <Button
                 className="gap-2"
-                onClick={() => navigate('/dashboard/org-admin/apps/create')}
+                onClick={() => navigate('/org-admin/dashboard/apps/create')}
               >
                 <Plus className="h-4 w-4" />
                 Create Application
@@ -442,14 +444,14 @@ export function OrgApplications() {
                             <button
                               title="View"
                               className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                              onClick={() => navigate(`/dashboard/org-admin/apps/${app.id}`)}
+                              onClick={() => navigate(`/org-admin/dashboard/apps/${app.id}`)}
                             >
                               <Eye className="h-4 w-4" />
                             </button>
                             <button
                               title="Edit"
                               className="p-1.5 rounded-lg text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
-                              onClick={() => navigate(`/dashboard/org-admin/apps/${app.id}`)}
+                              onClick={() => navigate(`/org-admin/dashboard/apps/${app.id}`)}
                             >
                               <Pencil className="h-4 w-4" />
                             </button>

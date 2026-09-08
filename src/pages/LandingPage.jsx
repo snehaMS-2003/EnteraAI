@@ -77,7 +77,9 @@ export function LandingPage() {
             <Link to="/register">
               <Button size="lg" variant="primary">Get Started</Button>
             </Link>
-            <Button size="lg" variant="secondary">View Demo</Button>
+            <a href="#features">
+              <Button size="lg" variant="secondary">View Demo</Button>
+            </a>
           </motion.div>
 
           <motion.div

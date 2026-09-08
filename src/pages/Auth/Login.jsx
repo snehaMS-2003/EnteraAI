@@ -33,21 +33,23 @@ export function Login() {
         const role = data.user?.role;
         
         if (role === 'sys_admin') {
-          navigate('/dashboard/sys-admin');
+          navigate('/admin/dashboard');
         } else if (role === 'org_admin') {
-          navigate('/dashboard/org-admin');
-        } else if (role === 'lead_designer' || role === 'designer' || role === 'app_admin' || role === 'user') {
-          navigate('/dashboard/designer');
+          navigate('/org-admin/dashboard');
+        } else if (role === 'lead_designer') {
+          navigate('/lead-designer/dashboard');
+        } else if (role === 'designer' || role === 'app_admin' || role === 'user') {
+          navigate('/designer/dashboard');
         } else {
           // Fallback
-          navigate('/dashboard/designer');
+          navigate('/designer/dashboard');
         }
       } else {
-        setErrorMsg(data.error || 'Invalid credentials');
+        setErrorMsg(data.error || 'Incorrect email or password.');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setErrorMsg('Server unavailable');
+      setErrorMsg('Unable to connect to the server. Please try again.');
     } finally {
       setLoading(false);
     }

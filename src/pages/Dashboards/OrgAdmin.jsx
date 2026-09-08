@@ -66,13 +66,15 @@ export function OrgAdmin() {
           <p className="text-gray-400">Manage your organization's applications and designers.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="secondary" onClick={() => navigate('/dashboard/org-admin/apps')}>
+          <Button variant="secondary" onClick={() => navigate('/org-admin/dashboard/apps')}>
             View Applications
           </Button>
-          <Button onClick={() => navigate('/dashboard/org-admin/apps/create')} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Create Application
-          </Button>
+          {stats.totalApplications === 0 && (
+            <Button onClick={() => navigate('/org-admin/dashboard/apps/create')} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Application
+            </Button>
+          )}
         </div>
       </div>
 
@@ -176,7 +178,7 @@ export function OrgAdmin() {
       <div className="mt-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white">Recent Applications</h2>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard/org-admin/apps')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/org-admin/dashboard/apps')}>
             View All
           </Button>
         </div>
@@ -214,7 +216,7 @@ export function OrgAdmin() {
                         {new Date(app.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="icon" onClick={() => navigate(`/dashboard/org-admin/apps`)}>
+                        <Button variant="ghost" size="icon" onClick={() => navigate(`/org-admin/dashboard/apps`)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                       </td>
@@ -227,9 +229,11 @@ export function OrgAdmin() {
             <div className="p-12 text-center text-gray-400">
               <LayoutDashboard className="h-12 w-12 mx-auto mb-4 opacity-20" />
               <p>No applications found.</p>
-              <Button onClick={() => navigate('/dashboard/org-admin/apps/create')} className="mt-4" variant="secondary">
-                Create First Application
-              </Button>
+              {stats.totalApplications === 0 && (
+                <Button onClick={() => navigate('/org-admin/dashboard/apps/create')} className="mt-4" variant="secondary">
+                  Create First Application
+                </Button>
+              )}
             </div>
           )}
         </Card>

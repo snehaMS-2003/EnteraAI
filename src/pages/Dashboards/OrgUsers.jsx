@@ -55,6 +55,7 @@ export function OrgUsers() {
   const [editDesigner, setEditDesigner] = useState(null);
   const [viewDesigner, setViewDesigner] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [inviteModalData, setInviteModalData] = useState(null);
 
   useEffect(() => {
     if (!userAuth || !userAuth.organizationId) {
@@ -104,7 +105,17 @@ export function OrgUsers() {
         if (data.token) {
            const inviteLink = `${window.location.origin}/accept-invitation?token=${data.token}`;
            console.log(`[TESTING ONLY] Invitation link for user ${userId}: ${inviteLink}`);
-           alert(`${data.message}\n\nTesting Link:\n${inviteLink}\n\n(Link is also in the console)`);
+           const user = users.find(u => u.id === userId);
+           if (user) {
+             setInviteModalData({
+               name: user.name,
+               email: user.email,
+               role: user.role,
+               inviteLink: inviteLink
+             });
+           } else {
+             alert(`${data.message}\n\nTesting Link:\n${inviteLink}\n\n(Link is also in the console)`);
+           }
         } else {
            alert(data.message || `Action ${action} successful`);
         }
@@ -361,6 +372,13 @@ export function OrgUsers() {
              </div>
            </div>
         )}
+
+        {inviteModalData && (
+          <InviteSuccessModal 
+            data={inviteModalData} 
+            onClose={() => setInviteModalData(null)} 
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -371,6 +389,7 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
   const [form, setForm] = useState({
     name: designer?.name || '',
     email: designer?.email || '',
+    password: '',
     role: designer?.role || 'user',
     status: designer?.status || 'pending',
     applications: designer?.assigned_applications?.map(a => a.id) || []
@@ -429,8 +448,14 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Email</label>
             <Input required type="email" value={form.email} disabled={!!designer} onChange={e => setForm({...form, email: e.target.value})} placeholder="jane@example.com" />
-            {!designer && <p className="text-xs text-primary-400 mt-1">An invitation link will be sent to this email.</p>}
           </div>
+          {!designer && (
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Password</label>
+              <Input required type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="••••••••" />
+              <p className="text-xs text-primary-400 mt-1">User will be created as active and can log in immediately with these credentials.</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Role</label>
@@ -471,7 +496,7 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
           
           <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
             <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={loading} className="bg-primary-600">{loading ? 'Saving...' : (designer ? 'Save Changes' : 'Send Invitation')}</Button>
+            <Button type="submit" disabled={loading} className="bg-primary-600">{loading ? 'Saving...' : (designer ? 'Save Changes' : 'Create User')}</Button>
           </div>
         </form>
       </motion.div>
@@ -533,6 +558,75 @@ function ViewDesignerModal({ designer, onClose }) {
               )}
             </div>
           </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Invitation Success Modal ────────────────────────────────────────────────
+function InviteSuccessModal({ data, onClose }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(data.inviteLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      alert("Invitation link copied.");
+    });
+  };
+
+  const handleOpen = () => {
+    window.open(data.inviteLink, '_blank');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative glass-card p-6 max-w-md w-full z-10">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-white">Invitation Sent Successfully</h2>
+          <button type="button" onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
+        </div>
+        
+        <div className="space-y-4 mb-6">
+          <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">User Name</p>
+              <p className="text-sm text-white">{data.name}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Email</p>
+              <p className="text-sm text-white">{data.email}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Role</p>
+              <p className="text-sm text-white capitalize">{data.role.replace('_', ' ')}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Status</p>
+              <StatusBadge status="invited" />
+            </div>
+          </div>
+          
+          <div>
+            <p className="text-xs text-gray-500 mb-1">Testing Link (Local Only)</p>
+            <div className="p-3 bg-black/30 border border-white/10 rounded-lg text-xs text-gray-400 break-all font-mono">
+              {data.inviteLink}
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex flex-col gap-3">
+          <Button onClick={handleCopy} className="w-full bg-primary-600 hover:bg-primary-500">
+            {copied ? 'Copied!' : 'Copy Link'}
+          </Button>
+          <Button onClick={handleOpen} variant="secondary" className="w-full">
+            Open Invitation
+          </Button>
+          <Button onClick={onClose} variant="secondary" className="w-full bg-white/5 hover:bg-white/10 text-white border-transparent">
+            Close
+          </Button>
         </div>
       </motion.div>
     </div>

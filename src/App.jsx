@@ -19,12 +19,17 @@ import { OrgCreateApplication } from './pages/Dashboards/OrgCreateApplication';
 import { OrgApplicationDetails } from './pages/Dashboards/OrgApplicationDetails';
 import { OrgUsers } from './pages/Dashboards/OrgUsers';
 import { OrgProfile } from './pages/Dashboards/OrgProfile';
+import { UserProfile } from './pages/Dashboards/UserProfile';
 import { SystemAdmin } from './pages/Dashboards/SystemAdmin';
 import { SysAdminOrganizations } from './pages/Dashboards/SysAdminOrganizations';
 import { SysAdminOrganizationDetails } from './pages/Dashboards/SysAdminOrganizationDetails';
 import { SysAdminUsers } from './pages/Dashboards/SysAdminUsers';
 import { CreateApplication } from './pages/Dashboards/CreateApplication';
 import { ConfigureApplication } from './pages/Dashboards/ConfigureApplication';
+import { DesignerApplications } from './pages/Dashboards/DesignerApplications';
+import { ApplicationWorkflow } from './pages/Dashboards/Workflow/ApplicationWorkflow';
+import { DatabaseSchemasStandalone } from './pages/Dashboards/DatabaseSchemasStandalone';
+import { RestApisStandalone } from './pages/Dashboards/RestApisStandalone';
 
 function App() {
   return (
@@ -41,31 +46,45 @@ function App() {
         <Route path="/accept-invite" element={<AcceptInvite />} />
         
         {/* App Designer Dashboard */}
-        <Route path="/dashboard/designer" element={<DashboardLayout role="designer" />}>
+        <Route path="/designer/dashboard" element={<DashboardLayout role="designer" />}>
           <Route index element={<AppDesigner />} />
-          <Route path="apps" element={<div className="text-white">My Applications (Coming Soon)</div>} />
-          <Route path="apps/create" element={<CreateApplication />} />
-          <Route path="apps/:id/configure" element={<ConfigureApplication />} />
-          <Route path="schemas" element={<div className="text-white">Database Schemas (Coming Soon)</div>} />
-          <Route path="apis" element={<div className="text-white">REST APIs (Coming Soon)</div>} />
+          <Route path="apps" element={<DesignerApplications />} />
+          <Route path="apps/:id/workflow/*" element={<ApplicationWorkflow />} />
+          <Route path="database-schemas" element={<DatabaseSchemasStandalone />} />
+          <Route path="apis" element={<RestApisStandalone />} />
+          <Route path="settings" element={<UserProfile />} />
+        </Route>
+        
+        {/* Lead Designer Dashboard */}
+        <Route path="/lead-designer/dashboard" element={<DashboardLayout role="lead_designer" />}>
+          <Route index element={<AppDesigner />} />
+          <Route path="apps" element={<DesignerApplications />} />
+          <Route path="apps/:id/workflow/*" element={<ApplicationWorkflow />} />
+          <Route path="database-schemas" element={<DatabaseSchemasStandalone />} />
+          <Route path="apis" element={<RestApisStandalone />} />
+          <Route path="settings" element={<UserProfile />} />
         </Route>
         
         {/* Org Admin Dashboard */}
-        <Route path="/dashboard/org-admin" element={<DashboardLayout role="org_admin" />}>
+        <Route path="/org-admin/dashboard" element={<DashboardLayout role="org_admin" />}>
           <Route index element={<OrgAdmin />} />
           <Route path="apps" element={<OrgApplications />} />
           <Route path="apps/create" element={<OrgCreateApplication />} />
           <Route path="apps/:id" element={<OrgApplicationDetails />} />
+          <Route path="database-schemas" element={<DatabaseSchemasStandalone />} />
+          <Route path="apis" element={<RestApisStandalone />} />
           <Route path="users" element={<OrgUsers />} />
           <Route path="profile" element={<OrgProfile />} />
+          <Route path="settings" element={<UserProfile />} />
         </Route>
         
         {/* System Admin Dashboard */}
-        <Route path="/dashboard/sys-admin" element={<DashboardLayout role="sys_admin" />}>
+        <Route path="/admin/dashboard" element={<DashboardLayout role="sys_admin" />}>
           <Route index element={<SystemAdmin />} />
           <Route path="orgs" element={<SysAdminOrganizations />} />
           <Route path="orgs/:id" element={<SysAdminOrganizationDetails />} />
           <Route path="users" element={<SysAdminUsers />} />
+          <Route path="settings" element={<UserProfile />} />
         </Route>
         
         {/* Fallback */}

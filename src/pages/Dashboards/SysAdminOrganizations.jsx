@@ -1,28 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Search, Filter, MoreVertical, Eye, Power, PowerOff, AlertCircle } from 'lucide-react';
+import { Building2, Power, PowerOff, AlertCircle } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 
 export function SysAdminOrganizations() {
   const navigate = useNavigate();
   const [organizations, setOrganizations] = useState([]);
-  const [stats, setStats] = useState({
-    totalOrganizations: 0,
-    activeOrganizations: 0,
-    inactiveOrganizations: 0,
-    totalApplications: 0
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [industryFilter, setIndustryFilter] = useState('');
 
   useEffect(() => {
     fetchOrganizations();
@@ -31,22 +18,14 @@ export function SysAdminOrganizations() {
   const fetchOrganizations = async () => {
     setLoading(true);
     try {
-      const [orgsResponse, statsResponse] = await Promise.all([
-        fetch('http://127.0.0.1:5000/api/organizations', {
-          headers: { 'x-user-role': 'sys_admin' }
-        }),
-        fetch('http://127.0.0.1:5000/api/sysadmin/stats', {
-          headers: { 'x-user-role': 'sys_admin' }
-        })
-      ]);
+      const orgsResponse = await fetch('http://127.0.0.1:5000/api/organizations', {
+        headers: { 'x-user-role': 'sys_admin' }
+      });
       
-      if (!orgsResponse.ok || !statsResponse.ok) throw new Error('Failed to fetch data');
+      if (!orgsResponse.ok) throw new Error('Failed to fetch data');
       
       const orgsData = await orgsResponse.json();
-      const statsData = await statsResponse.json();
-      
       setOrganizations(orgsData);
-      setStats(statsData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -57,7 +36,6 @@ export function SysAdminOrganizations() {
   const handleStatusToggle = async (id, currentStatus) => {
     try {
       const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
       const response = await fetch(`http://127.0.0.1:5000/api/organizations/${id}/status`, {
         method: 'PATCH',
         headers: {
@@ -78,162 +56,102 @@ export function SysAdminOrganizations() {
     }
   };
 
-  const filteredOrgs = organizations.filter(org => {
-    const matchesSearch = 
-      org.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      org.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      org.admin_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter ? org.status === statusFilter : true;
-    const matchesIndustry = industryFilter ? org.industry === industryFilter : true;
-    return matchesSearch && matchesStatus && matchesIndustry;
-  });
-
-  // Unique industries for filter dropdown
-  const industries = [...new Set(organizations.map(o => o.industry).filter(Boolean))];
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Organizations</h1>
-          <p className="text-gray-400">Manage all organizations registered on the Entera.ai platform.</p>
+          <h1 className="text-2xl font-bold text-white">Organization</h1>
+          <p className="text-gray-400">Manage the registered organization on the Entera.ai single-organization platform.</p>
         </div>
-        <Button onClick={() => navigate('/register')}>+ Register Organization</Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-6">
-          <p className="text-sm text-gray-400 font-medium">Total Organizations</p>
-          <p className="text-3xl font-bold text-white mt-2">{stats.totalOrganizations}</p>
-        </Card>
-        <Card className="p-6">
-          <p className="text-sm text-gray-400 font-medium">Active</p>
-          <p className="text-3xl font-bold text-green-500 mt-2">{stats.activeOrganizations}</p>
-        </Card>
-        <Card className="p-6">
-          <p className="text-sm text-gray-400 font-medium">Inactive</p>
-          <p className="text-3xl font-bold text-red-500 mt-2">{stats.inactiveOrganizations}</p>
-        </Card>
-        <Card className="p-6">
-          <p className="text-sm text-gray-400 font-medium">Total Applications</p>
-          <p className="text-3xl font-bold text-blue-500 mt-2">{stats.totalApplications}</p>
-        </Card>
-      </div>
-
-      <Card className="p-6">
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-            <Input 
-              className="pl-10 h-10" 
-              placeholder="Search organizations by name, email, or admin..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="w-full md:w-48">
-            <Select className="h-10" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="" className="bg-gray-900 text-white">All Statuses</option>
-              <option value="active" className="bg-gray-900 text-white">Active</option>
-              <option value="inactive" className="bg-gray-900 text-white">Inactive</option>
-            </Select>
-          </div>
-          <div className="w-full md:w-48">
-            <Select className="h-10" value={industryFilter} onChange={(e) => setIndustryFilter(e.target.value)}>
-              <option value="" className="bg-gray-900 text-white">All Industries</option>
-              {industries.map(ind => (
-                <option key={ind} value={ind} className="bg-gray-900 text-white">{ind}</option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="py-12 flex justify-center text-gray-400">Loading organizations...</div>
-        ) : error ? (
-          <div className="py-12 flex justify-center text-red-400"><AlertCircle className="mr-2" /> {error}</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-white/10 text-gray-400 text-sm">
-                  <th className="pb-3 font-medium">Organization Name</th>
-                  <th className="pb-3 font-medium">Admin & Email</th>
-                  <th className="pb-3 font-medium">Industry</th>
-                  <th className="pb-3 font-medium">Apps</th>
-                  <th className="pb-3 font-medium">Users</th>
-                  <th className="pb-3 font-medium">Reg. Date</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {filteredOrgs.map((org) => (
-                  <tr key={org.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="py-4 font-medium text-white flex items-center gap-2">
-                      <div className="h-8 w-8 rounded bg-primary-500/20 flex items-center justify-center text-primary-500">
-                        <Building2 className="h-4 w-4" />
-                      </div>
-                      {org.name}
-                    </td>
-                    <td className="py-4">
-                      <div className="text-white">{org.admin_name}</div>
-                      <div className="text-gray-500 text-xs">{org.email}</div>
-                    </td>
-                    <td className="py-4 text-gray-300 capitalize">{org.industry || '-'}</td>
-                    <td className="py-4 text-gray-300">{org.applications_count || 0}</td>
-                    <td className="py-4 text-gray-300">{org.users_count || 0}</td>
-                    <td className="py-4 text-gray-300">
-                      {(() => {
-                        if (!org.created_at) return 'N/A';
-                        const date = new Date(org.created_at);
-                        if (isNaN(date.getTime())) return 'N/A';
-                        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                      })()}
-                    </td>
-                    <td className="py-4">
-                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                        org.status === 'active' 
-                          ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
-                          : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                      }`}>
-                        {org.status === 'active' ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="py-4 text-right space-x-2">
-                      <button 
-                        onClick={() => navigate(`/dashboard/sys-admin/orgs/${org.id}`)}
-                        className="p-1.5 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleStatusToggle(org.id, org.status)}
-                        className={`p-1.5 rounded transition-colors ${
-                          org.status === 'active' 
-                            ? 'text-red-400 hover:bg-red-500/20 bg-white/5' 
-                            : 'text-green-400 hover:bg-green-500/20 bg-white/5'
-                        }`}
-                        title={org.status === 'active' ? 'Deactivate' : 'Activate'}
-                      >
-                        {org.status === 'active' ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredOrgs.length === 0 && (
-                  <tr>
-                    <td colSpan="8" className="py-8 text-center text-gray-500">
-                      No organizations found matching your filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        {/* Only show Register button if NO organization exists */}
+        {!loading && organizations.length === 0 && (
+          <Button onClick={() => navigate('/register')}>+ Register Organization</Button>
         )}
-      </Card>
+      </div>
+
+      {loading ? (
+        <Card className="p-12 flex justify-center text-gray-400">Loading organization details...</Card>
+      ) : error ? (
+        <Card className="p-12 flex justify-center text-red-400"><AlertCircle className="mr-2" /> {error}</Card>
+      ) : organizations.length === 0 ? (
+        <Card className="p-12 flex flex-col items-center justify-center text-center">
+          <Building2 className="h-16 w-16 text-gray-600 mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">No Organization Registered</h2>
+          <p className="text-gray-400 max-w-md">There is currently no organization registered on this platform. You must register one to start using the system.</p>
+        </Card>
+      ) : (
+        <Card className="p-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-b border-white/10 pb-6 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-xl bg-primary-500/20 flex items-center justify-center text-primary-500">
+                <Building2 className="h-8 w-8" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white">{organizations[0].name}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    organizations[0].status === 'active' 
+                      ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
+                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  }`}>
+                    {organizations[0].status === 'active' ? 'Active' : 'Inactive'}
+                  </span>
+                  <span className="text-gray-400 text-sm">
+                    Registered on: {organizations[0].created_at ? new Date(organizations[0].created_at).toLocaleDateString() : 'N/A'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-4 md:mt-0 flex gap-3">
+              <Button 
+                variant="outline"
+                onClick={() => navigate(`/admin/dashboard/orgs/${organizations[0].id}`)}
+              >
+                View Full Details
+              </Button>
+              <Button 
+                variant={organizations[0].status === 'active' ? "destructive" : "primary"}
+                onClick={() => handleStatusToggle(organizations[0].id, organizations[0].status)}
+                className="flex items-center gap-2"
+              >
+                {organizations[0].status === 'active' ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                {organizations[0].status === 'active' ? 'Deactivate' : 'Activate'}
+              </Button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div>
+              <p className="text-sm font-medium text-gray-500 mb-1">Industry</p>
+              <p className="text-white capitalize">{organizations[0].industry || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 mb-1">Administrator</p>
+              <p className="text-white">{organizations[0].admin_name}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 mb-1">Email</p>
+              <p className="text-white">{organizations[0].email}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500 mb-1">Phone</p>
+              <p className="text-white">{organizations[0].phone || 'N/A'}</p>
+            </div>
+          </div>
+
+          <div className="mt-8 grid grid-cols-2 gap-4">
+             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+               <p className="text-gray-400 font-medium mb-2">Total Applications</p>
+               <p className="text-3xl font-bold text-blue-500">{organizations[0].applications_count || 0}</p>
+             </div>
+             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
+               <p className="text-gray-400 font-medium mb-2">Total Users</p>
+               <p className="text-3xl font-bold text-green-500">{organizations[0].users_count || 0}</p>
+             </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

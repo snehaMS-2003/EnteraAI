@@ -68,7 +68,7 @@ export function SysAdminOrganizationDetails() {
   if (error) {
     return (
       <div className="space-y-6">
-        <Button variant="outline" onClick={() => navigate('/dashboard/sys-admin/orgs')} className="gap-2">
+        <Button variant="outline" onClick={() => navigate('/admin/dashboard/orgs')} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Back to Organizations
         </Button>
         <div className="py-12 flex justify-center text-red-400"><AlertCircle className="mr-2" /> {error}</div>
@@ -80,7 +80,7 @@ export function SysAdminOrganizationDetails() {
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <button 
-          onClick={() => navigate('/dashboard/sys-admin/orgs')}
+          onClick={() => navigate('/admin/dashboard/orgs')}
           className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="h-4 w-4" /> Back to Organizations
