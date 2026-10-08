@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { useAuth } from '../../../hooks/useAuth';
+import { useAuth, orgFetch } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { Save, ArrowRight, ArrowLeft, Database, Plus } from 'lucide-react';
+import { Save, ArrowRight, ArrowLeft, Database, Plus, Check, Trash2 } from 'lucide-react';
 
 export function DatabaseSchema({ application, basePath = '', isStandalone = false }) {
   const { user } = useAuth();
@@ -11,17 +11,13 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
   const [schemaData, setSchemaData] = useState({ tables: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     const fetchSchema = async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/schema`, {
-          headers: {
-            'x-org-id': user?.organizationId,
-            'x-user-id': user?.id,
-            'x-user-email': user?.email
-          }
-        });
+        const res = await orgFetch(`/api/designer/applications/${application.id}/schema`);
         if (res.ok) {
           const data = await res.json();
           setSchemaData(data);
@@ -37,22 +33,26 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
 
   const handleSave = async (redirect = false) => {
     setSaving(true);
+    setSaveSuccess(false);
+    setSaveError('');
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/schema`, {
+      const res = await orgFetch(`/api/designer/applications/${application.id}/schema`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-org-id': user?.organizationId,
-          'x-user-id': user?.id,
-          'x-user-email': user?.email
-        },
         body: JSON.stringify({ schema_data: schemaData })
       });
-      if (res.ok && redirect) {
-        navigate(`${basePath}/apps/${application.id}/workflow/apis`);
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000);
+        if (redirect) {
+          navigate(`${basePath}/apps/${application.id}/workflow/apis`);
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save schema');
       }
     } catch (err) {
       console.error(err);
+      setSaveError(err.message || 'An error occurred while saving.');
     } finally {
       setSaving(false);
     }
@@ -78,6 +78,12 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
           <Plus className="h-4 w-4" /> Add Table
         </Button>
       </div>
+
+      {saveError && (
+        <div className="p-3 bg-red-500/20 border border-red-500/50 text-red-400 rounded-lg text-sm">
+          {saveError}
+        </div>
+      )}
       
       <div className="space-y-4 my-6">
         {schemaData.tables && schemaData.tables.length === 0 ? (
@@ -94,9 +100,10 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
                   type="text" 
                   value={table.name} 
                   onChange={(e) => {
-                    const newTables = [...schemaData.tables];
-                    newTables[idx].name = e.target.value;
-                    setSchemaData({...schemaData, tables: newTables});
+                    setSchemaData(prev => ({
+                      ...prev,
+                      tables: prev.tables.map((t, i) => i === idx ? { ...t, name: e.target.value } : t)
+                    }));
                   }}
                   className="bg-dark-400/50 border border-white/10 rounded px-3 py-1.5 text-white font-mono"
                 />
@@ -117,18 +124,26 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
                       placeholder="Column name"
                       value={col.name}
                       onChange={(e) => {
-                        const newTables = [...schemaData.tables];
-                        newTables[idx].columns[colIdx].name = e.target.value;
-                        setSchemaData({...schemaData, tables: newTables});
+                        setSchemaData(prev => ({
+                          ...prev,
+                          tables: prev.tables.map((t, i) => i === idx ? {
+                            ...t,
+                            columns: t.columns.map((c, j) => j === colIdx ? { ...c, name: e.target.value } : c)
+                          } : t)
+                        }));
                       }}
                       className="flex-1 bg-dark-300 border border-white/10 rounded px-2 py-1 text-sm font-mono"
                     />
                     <select
                       value={col.type || 'varchar'}
                       onChange={(e) => {
-                        const newTables = [...schemaData.tables];
-                        newTables[idx].columns[colIdx].type = e.target.value;
-                        setSchemaData({...schemaData, tables: newTables});
+                        setSchemaData(prev => ({
+                          ...prev,
+                          tables: prev.tables.map((t, i) => i === idx ? {
+                            ...t,
+                            columns: t.columns.map((c, j) => j === colIdx ? { ...c, type: e.target.value } : c)
+                          } : t)
+                        }));
                       }}
                       className="bg-dark-300 border border-white/10 rounded px-2 py-1 text-sm font-mono text-gray-300"
                     >
@@ -143,19 +158,43 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
                         type="checkbox" 
                         checked={col.primaryKey || false}
                         onChange={(e) => {
-                          const newTables = [...schemaData.tables];
-                          newTables[idx].columns[colIdx].primaryKey = e.target.checked;
-                          setSchemaData({...schemaData, tables: newTables});
+                          setSchemaData(prev => ({
+                            ...prev,
+                            tables: prev.tables.map((t, i) => i === idx ? {
+                              ...t,
+                              columns: t.columns.map((c, j) => j === colIdx ? { ...c, primaryKey: e.target.checked } : c)
+                            } : t)
+                          }));
                         }}
                       /> PK
                     </label>
+                    <button
+                      type="button"
+                      title="Delete Column"
+                      onClick={() => {
+                        setSchemaData(prev => ({
+                          ...prev,
+                          tables: prev.tables.map((t, i) => i === idx ? {
+                            ...t,
+                            columns: t.columns.filter((_, j) => j !== colIdx)
+                          } : t)
+                        }));
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
                 <Button variant="outline" size="sm" className="mt-2"
                   onClick={() => {
-                    const newTables = [...schemaData.tables];
-                    newTables[idx].columns = [...(newTables[idx].columns || []), { name: 'new_column', type: 'varchar' }];
-                    setSchemaData({...schemaData, tables: newTables});
+                    setSchemaData(prev => ({
+                      ...prev,
+                      tables: prev.tables.map((t, i) => i === idx ? {
+                        ...t,
+                        columns: [...(t.columns || []), { name: 'new_column', type: 'varchar' }]
+                      } : t)
+                    }));
                   }}
                 >
                   + Add Column
@@ -187,9 +226,18 @@ export function DatabaseSchema({ application, basePath = '', isStandalone = fals
       
       {isStandalone && (
         <div className="flex justify-end items-center mt-8 pt-6 border-t border-white/10">
-          <Button onClick={() => handleSave(false)} disabled={saving} className="flex items-center gap-2 bg-primary-600 hover:bg-primary-500">
-            <Save className="h-4 w-4" />
-            {saving ? 'Saving...' : 'Save Changes'}
+          <Button onClick={() => handleSave(false)} disabled={saving} className="flex items-center gap-2 bg-primary-600 hover:bg-primary-500 min-w-[140px]">
+            {saveSuccess ? (
+              <>
+                <Check className="h-4 w-4" />
+                Saved!
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                {saving ? 'Saving...' : 'Save Changes'}
+              </>
+            )}
           </Button>
         </div>
       )}

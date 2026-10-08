@@ -1,35 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { orgFetch } from '../../hooks/useAuth';
+import React from 'react';
+import { useApplicationContext } from '../../contexts/ApplicationContext';
 import { ApiManagement } from './Workflow/ApiManagement';
 import { Network, ChevronDown } from 'lucide-react';
 
 export function RestApisStandalone() {
-  const [applications, setApplications] = useState([]);
-  const [selectedAppId, setSelectedAppId] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchApps = async () => {
-      try {
-        const res = await orgFetch('/api/designer/applications');
-        if (!res.ok) throw new Error('Failed to load applications');
-        const data = await res.json();
-        
-        setApplications(data);
-        if (data && data.length > 0) {
-          setSelectedAppId(data[0].id.toString());
-        }
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchApps();
-  }, []);
-
-  const selectedApp = applications.find(app => app.id.toString() === selectedAppId);
+  const { applications, selectedAppId, setSelectedAppId, selectedApp, loading, error } = useApplicationContext();
 
   if (loading) {
     return (
@@ -65,6 +40,8 @@ export function RestApisStandalone() {
     );
   }
 
+  const targetApp = selectedApp || (applications.length > 0 ? applications[0] : null);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
@@ -79,7 +56,9 @@ export function RestApisStandalone() {
             <div className="relative">
               <select
                 value={selectedAppId}
-                onChange={(e) => setSelectedAppId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedAppId(e.target.value);
+                }}
                 className="w-full bg-dark-400 border border-white/10 text-white rounded-lg pl-4 pr-10 py-2.5 appearance-none focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {applications.map(app => (
@@ -92,8 +71,8 @@ export function RestApisStandalone() {
         )}
       </div>
       
-      {selectedApp && (
-        <ApiManagement application={selectedApp} isStandalone={true} />
+      {targetApp && (
+        <ApiManagement application={targetApp} isStandalone={true} />
       )}
     </div>
   );
