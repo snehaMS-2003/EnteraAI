@@ -26,9 +26,9 @@ export function Review({ application, basePath = `${basePath}` }) {
         };
         
         const [modRes, schemaRes, apiRes] = await Promise.all([
-          fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/modules`, { headers }),
-          fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/schema`, { headers }),
-          fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/apis`, { headers })
+          fetch(`/api/designer/applications/${application.id}/modules`, { headers }),
+          fetch(`/api/designer/applications/${application.id}/schema`, { headers }),
+          fetch(`/api/designer/applications/${application.id}/apis`, { headers })
         ]);
 
         const modules = modRes.ok ? await modRes.json() : [];
