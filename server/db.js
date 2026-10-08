@@ -1,41 +1,70 @@
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-const pool = new Pool({
-  user: process.env.POSTGRES_USER || 'postgres',
-  host: process.env.POSTGRES_HOST || 'localhost',
-  database: process.env.POSTGRES_DB || 'entera',
-  password: process.env.POSTGRES_PASSWORD || 'password',
-  port: process.env.POSTGRES_PORT || 5432,
-});
+const poolConfig = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      user: process.env.POSTGRES_USER || 'postgres',
+      host: process.env.POSTGRES_HOST || 'localhost',
+      database: process.env.POSTGRES_DB || 'entera',
+      password: process.env.POSTGRES_PASSWORD || 'password',
+      port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
+    };
+
+if (process.env.DATABASE_SSL === 'true') {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+
+const pool = new Pool(poolConfig);
 
 const createDatabaseIfNecessary = async () => {
-  const tempPool = new Pool({
-    user: process.env.POSTGRES_USER || 'postgres',
-    host: process.env.POSTGRES_HOST || 'localhost',
-    database: 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'password',
-    port: process.env.POSTGRES_PORT || 5432,
-    connectionTimeoutMillis: 5000,
-  });
+  let tempPoolConfig;
+  let targetDbName = process.env.POSTGRES_DB || 'entera';
+
+  if (process.env.DATABASE_URL) {
+    try {
+      const parsedUrl = new URL(process.env.DATABASE_URL);
+      if (parsedUrl.pathname && parsedUrl.pathname.length > 1) {
+        targetDbName = parsedUrl.pathname.slice(1);
+      }
+      parsedUrl.pathname = '/postgres';
+      tempPoolConfig = { connectionString: parsedUrl.toString(), connectionTimeoutMillis: 5000 };
+    } catch {
+      tempPoolConfig = { connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 };
+    }
+  } else {
+    tempPoolConfig = {
+      user: process.env.POSTGRES_USER || 'postgres',
+      host: process.env.POSTGRES_HOST || 'localhost',
+      database: 'postgres',
+      password: process.env.POSTGRES_PASSWORD || 'password',
+      port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
+      connectionTimeoutMillis: 5000,
+    };
+  }
+
+  const tempPool = new Pool(tempPoolConfig);
 
   try {
     const client = await tempPool.connect();
-    const dbName = process.env.POSTGRES_DB || 'entera';
-    const res = await client.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
+    const res = await client.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [targetDbName]);
     if (res.rowCount === 0) {
-      console.log(`Database "${dbName}" does not exist. Creating it...`);
-      await client.query(`CREATE DATABASE "${dbName}"`);
-      console.log(`Database "${dbName}" created successfully.`);
+      console.log(`Database "${targetDbName}" does not exist. Creating it...`);
+      await client.query(`CREATE DATABASE "${targetDbName}"`);
+      console.log(`Database "${targetDbName}" created successfully.`);
     } else {
-      console.log(`Database "${dbName}" already exists.`);
+      console.log(`Database "${targetDbName}" already exists.`);
     }
     client.release();
   } catch (err) {
-    console.error('Failed to connect to native PostgreSQL server. Please check credentials and ensure the service is running on port 5432.');
-    throw err;
+    console.warn('Note: Could not check/create database via default postgres catalog, proceeding to target DB:', err.message);
   } finally {
-    await tempPool.end();
+    try {
+      await tempPool.end();
+    } catch {
+      // ignore
+    }
   }
 };
 
@@ -99,6 +128,47 @@ const initDB = async () => {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP;
     `);
 
+    // Ensure sysadmin user role and org are correct
+    await client.query(`
+      UPDATE users 
+      SET role = 'sys_admin', organization_id = NULL 
+      WHERE LOWER(email) = 'admin@gmail.com';
+    `);
+
+    // Ensure at least one system administrator exists on fresh databases
+    const sysAdminCount = await client.query("SELECT COUNT(*) FROM users WHERE role = 'sys_admin'");
+    if (parseInt(sysAdminCount.rows[0].count, 10) === 0) {
+      const defaultAdminEmail = (process.env.INITIAL_ADMIN_EMAIL || 'admin@gmail.com').toLowerCase();
+      const defaultAdminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'admin@123';
+      const passwordHash = await bcrypt.hash(defaultAdminPassword, 10);
+      await client.query(`
+        INSERT INTO users (name, email, password_hash, role, status, created_at)
+        VALUES ('System Administrator', $1, $2, 'sys_admin', 'active', CURRENT_TIMESTAMP)
+        ON CONFLICT (email) DO UPDATE SET role = 'sys_admin', status = 'active';
+      `, [defaultAdminEmail, passwordHash]);
+      console.log(`Initial System Administrator initialized (${defaultAdminEmail}).`);
+    }
+
+    // Ensure default test Designer exists for TechCorp Solutions (Org 7)
+    const designerCheck = await client.query("SELECT id FROM users WHERE LOWER(email) = 'sneha123@gmail.com'");
+    if (designerCheck.rows.length === 0) {
+      const designerHash = await bcrypt.hash('password123', 10);
+      const designerRes = await client.query(`
+        INSERT INTO users (organization_id, name, email, password_hash, role, status, created_at)
+        VALUES (7, 'sneha', 'sneha123@gmail.com', $1, 'designer', 'active', CURRENT_TIMESTAMP)
+        ON CONFLICT (email) DO UPDATE SET password_hash = $1, status = 'active', role = 'designer', organization_id = 7
+        RETURNING id;
+      `, [designerHash]);
+      if (designerRes.rows.length > 0) {
+        await client.query(`
+          INSERT INTO designer_applications (designer_id, application_id)
+          VALUES ($1, 5)
+          ON CONFLICT DO NOTHING;
+        `, [designerRes.rows[0].id]);
+        console.log('Default Designer initialized (sneha123@gmail.com).');
+      }
+    }
+
     // Designer Applications Table (Many-to-Many mapping)
     await client.query(`
       CREATE TABLE IF NOT EXISTS designer_applications (
@@ -134,15 +204,19 @@ const initDB = async () => {
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT false`);
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE`);
+    await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS published_version VARCHAR(50) DEFAULT '1.0'`);
+    await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS published_at TIMESTAMP`);
+    await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS published_config JSONB`);
     
-    // Enforce one application per organization
+    // Enforce business rule: One Organization = One Active Application
     try {
-      await client.query(`ALTER TABLE applications ADD CONSTRAINT unique_org_app UNIQUE (organization_id)`);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_app_per_org 
+        ON applications (organization_id) 
+        WHERE archived = false;
+      `);
     } catch (e) {
-      // Ignore if constraint already exists (error code 42710)
-      if (e.code !== '42710') {
-        console.warn('Could not add unique_org_app constraint:', e.message);
-      }
+      console.warn('Could not create idx_one_active_app_per_org index:', e.message);
     }
 
 
@@ -170,7 +244,7 @@ const initDB = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS application_modules (
         id SERIAL PRIMARY KEY,
-        application_id INTEGER REFERENCES applications(id),
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
         module_id VARCHAR(100) REFERENCES modules(id),
         is_enabled BOOLEAN DEFAULT true,
         config JSONB
@@ -181,7 +255,7 @@ const initDB = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS database_schemas (
         id SERIAL PRIMARY KEY,
-        application_id INTEGER REFERENCES applications(id),
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
         schema_data JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -191,7 +265,7 @@ const initDB = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS apis (
         id SERIAL PRIMARY KEY,
-        application_id INTEGER REFERENCES applications(id),
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
         api_data JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -201,12 +275,93 @@ const initDB = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS deployments (
         id SERIAL PRIMARY KEY,
-        application_id INTEGER REFERENCES applications(id),
-        deployment_type VARCHAR(50),
-        status VARCHAR(50),
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
+        deployment_type VARCHAR(50) DEFAULT 'cloud',
+        status VARCHAR(50) DEFAULT 'published',
+        deployment_state VARCHAR(50) DEFAULT 'DEPLOYED',
+        version VARCHAR(50) DEFAULT '1.0',
         deployment_url TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        config_snapshot JSONB,
+        published_by VARCHAR(255),
+        published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    // Ensure columns exist on deployments table (idempotent)
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS version VARCHAR(50) DEFAULT '1.0'`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deployment_state VARCHAR(50) DEFAULT 'DEPLOYED'`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deployment_url TEXT`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS config_snapshot JSONB`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS published_by VARCHAR(255)`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+
+    // Application Pages Table (Application Builder)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS application_pages (
+        id SERIAL PRIMARY KEY,
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(255) NOT NULL,
+        title VARCHAR(255),
+        description TEXT,
+        layout JSONB DEFAULT '{"columns": 12, "spacing": "normal"}'::jsonb,
+        components JSONB DEFAULT '[]'::jsonb,
+        order_index INTEGER DEFAULT 0,
+        is_home BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uq_app_page_slug UNIQUE (application_id, slug)
+      );
+    `);
+
+    // Application Navigation Table (Application Builder)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS application_navigation (
+        id SERIAL PRIMARY KEY,
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE UNIQUE,
+        nav_items JSONB DEFAULT '[]'::jsonb,
+        settings JSONB DEFAULT '{"brandName": "", "style": "sidebar", "theme": "dark"}'::jsonb,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Application Students Table (Runtime Data)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS students (
+        id SERIAL PRIMARY KEY,
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
+        organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        phone VARCHAR(50),
+        course VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'Active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Generic Application Entities Table (Dynamic Runtime Entities)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS application_entities (
+        id SERIAL PRIMARY KEY,
+        application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
+        organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+        entity_type VARCHAR(100) NOT NULL,
+        data JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_app_entities_lookup ON application_entities (application_id, entity_type);
+      CREATE INDEX IF NOT EXISTS idx_users_org_id ON users (organization_id);
+      CREATE INDEX IF NOT EXISTS idx_applications_org_id ON applications (organization_id);
+      CREATE INDEX IF NOT EXISTS idx_students_app_id ON students (application_id);
+      CREATE INDEX IF NOT EXISTS idx_students_org_id ON students (organization_id);
+      CREATE INDEX IF NOT EXISTS idx_deployments_app_id ON deployments (application_id);
     `);
 
     // Seed Templates and Modules

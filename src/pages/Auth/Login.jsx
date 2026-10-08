@@ -5,6 +5,7 @@ import { BrainCircuit, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { buildApiUrl } from '../../utils/api';
 
 export function Login() {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/login', {
+      const response = await fetch(buildApiUrl('/api/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -29,20 +30,21 @@ export function Login() {
       const data = await response.json();
 
       if (response.ok) {
+        data.user.organizationId = data.user.organizationId || data.user.organization_id;
         localStorage.setItem('user', JSON.stringify(data.user));
         const role = data.user?.role;
         
         if (role === 'sys_admin') {
-          navigate('/admin/dashboard');
+          window.location.href = '/admin/dashboard';
         } else if (role === 'org_admin') {
-          navigate('/org-admin/dashboard');
+          window.location.href = '/org-admin/dashboard';
         } else if (role === 'lead_designer') {
-          navigate('/lead-designer/dashboard');
+          window.location.href = '/lead-designer/dashboard';
         } else if (role === 'designer' || role === 'app_admin' || role === 'user') {
-          navigate('/designer/dashboard');
+          window.location.href = '/designer/dashboard';
         } else {
           // Fallback
-          navigate('/designer/dashboard');
+          window.location.href = '/designer/dashboard';
         }
       } else {
         setErrorMsg(data.error || 'Incorrect email or password.');

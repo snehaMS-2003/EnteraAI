@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, ArrowRight, CheckCircle2, ShieldCheck, User, Building, Briefcase, Mail } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { buildApiUrl } from '../../utils/api';
 
 export function AcceptInvite() {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ export function AcceptInvite() {
 
     const verifyToken = async () => {
       try {
-        const res = await fetch(`/api/invitations/${token}`);
+        const res = await fetch(buildApiUrl(`/api/invitations/${token}`));
         const data = await res.json();
         if (!res.ok) {
           throw new Error(data.error || 'Failed to verify token');
@@ -55,7 +56,7 @@ export function AcceptInvite() {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/accept-invite', {
+      const res = await fetch(buildApiUrl('/api/accept-invite'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password: form.password })

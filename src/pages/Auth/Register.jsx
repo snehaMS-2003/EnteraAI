@@ -9,6 +9,7 @@ import { Card } from '../../components/ui/Card';
 import { Country, State, City } from 'country-state-city';
 import { districtsByState } from '../../data/districts';
 import { citiesByDistrict } from '../../data/citiesByDistrict';
+import { buildApiUrl } from '../../utils/api';
 
 export function Register() {
   const [registered, setRegistered] = useState(false);
@@ -35,7 +36,7 @@ export function Register() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/register', {
+      const response = await fetch(buildApiUrl('/api/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -55,6 +56,12 @@ export function Register() {
     }
   };
 
+  let isSysAdmin = false;
+  try {
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    if (storedUser.role === 'sys_admin') isSysAdmin = true;
+  } catch {}
+
   if (registered) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -63,11 +70,23 @@ export function Register() {
             <div className="mx-auto w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mb-6">
               <BrainCircuit className="h-8 w-8" />
             </div>
-            <h2 className="text-2xl font-bold mb-4">Registration Successful!</h2>
-            <p className="text-gray-400 mb-8">Organization registered successfully. Please login to continue.</p>
-            <Link to="/login">
-              <Button className="w-full">Proceed to Login</Button>
-            </Link>
+            {isSysAdmin ? (
+              <>
+                <h2 className="text-2xl font-bold mb-4">Organization Registered!</h2>
+                <p className="text-gray-400 mb-8">Organization and administrator account have been created successfully in PostgreSQL.</p>
+                <Link to="/admin/dashboard/orgs">
+                  <Button className="w-full">Return to Organizations</Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold mb-4">Registration Successful!</h2>
+                <p className="text-gray-400 mb-8">Organization registered successfully. Please login to continue.</p>
+                <Link to="/login">
+                  <Button className="w-full">Proceed to Login</Button>
+                </Link>
+              </>
+            )}
           </Card>
         </motion.div>
       </div>
@@ -76,6 +95,13 @@ export function Register() {
 
   return (
     <div className="min-h-screen py-12 px-4 flex flex-col items-center">
+      {isSysAdmin && (
+        <div className="w-full max-w-2xl mb-4 flex justify-start">
+          <Link to="/admin/dashboard/orgs" className="text-sm text-gray-400 hover:text-white flex items-center gap-1 transition-colors">
+            ← Back to Organizations
+          </Link>
+        </div>
+      )}
       <div className="flex items-center gap-2 mb-8">
         <BrainCircuit className="h-8 w-8 text-primary-500" />
         <Link to="/" className="text-2xl font-bold text-white tracking-tight">

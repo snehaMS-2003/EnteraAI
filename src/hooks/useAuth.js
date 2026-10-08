@@ -1,31 +1,12 @@
 /**
- * useAuth — reads the current authenticated user from localStorage
- * (set by Login.jsx after a successful /api/login response).
- *
- * Returns the user object and a pre-configured orgFetch() helper that
- * automatically injects the X-Org-Id / X-User-Id / X-User-Email headers
- * required by the org-scoped backend routes.
+ * useAuth — re-exports useAuth from AuthContext for centralized state.
+ * orgFetch — wrapper around fetch() that automatically attaches org-auth headers.
  */
 
-import { useState } from 'react';
+import { buildApiUrl } from '../utils/api';
 
-export function useAuth() {
-  const [user] = useState(() => {
-    try {
-      const stored = localStorage.getItem('user');
-      if (stored) return JSON.parse(stored);
-    } catch {
-      return null;
-    }
-    return null;
-  });
-  return user;
-}
+export { useAuth } from '../contexts/AuthContext';
 
-/**
- * orgFetch(path, options)
- * Wrapper around fetch() that automatically attaches org-auth headers.
- */
 export function orgFetch(path, options = {}) {
   let user = null;
   try {
@@ -41,12 +22,14 @@ export function orgFetch(path, options = {}) {
   };
 
   if (user) {
-    if (user.organizationId) headers['X-Org-Id'] = String(user.organizationId);
-    if (user.id)             headers['X-User-Id'] = String(user.id);
-    if (user.email)          headers['X-User-Email'] = user.email;
+    const orgId = user.organizationId || user.organization_id;
+    if (orgId) headers['X-Org-Id'] = String(orgId);
+    if (user.id) headers['X-User-Id'] = String(user.id);
+    if (user.email) headers['X-User-Email'] = user.email;
+    if (user.role) headers['X-User-Role'] = user.role;
   }
 
-  return fetch(`http://127.0.0.1:5000${path}`, {
+  return fetch(buildApiUrl(path), {
     ...options,
     headers,
   });
