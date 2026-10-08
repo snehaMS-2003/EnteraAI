@@ -11,6 +11,14 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+server/pgdata
+pgdata
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +30,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary scratch and debugging scripts
+server/check_columns.js
+server/test_workflow.js
+server/update_app_schema.js
+test_schema.js
+
