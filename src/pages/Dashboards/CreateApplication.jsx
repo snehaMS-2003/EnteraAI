@@ -181,7 +181,7 @@ export function CreateApplication() {
 
   // Fetch Orgs & Modules on Mount
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/organizations')
+    fetch('/api/organizations')
       .then(res => res.json())
       .then(data => {
         const orgs = (Array.isArray(data) && data.length > 0) ? data : DEFAULT_ORGS;
@@ -195,7 +195,7 @@ export function CreateApplication() {
         setForm(prev => ({ ...prev, organizationId: DEFAULT_ORGS[0].id }));
       });
       
-    fetch('http://127.0.0.1:5000/api/modules')
+    fetch('/api/modules')
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
@@ -212,7 +212,7 @@ export function CreateApplication() {
   // Fetch Templates when Industry changes
   useEffect(() => {
     if (form.industry) {
-      fetch(`http://127.0.0.1:5000/api/templates?industry=${form.industry}`)
+      fetch(`/api/templates?industry=${form.industry}`)
         .then(res => res.json())
         .then(data => Array.isArray(data) && setTemplates(data))
         .catch(() => {});
@@ -257,7 +257,7 @@ export function CreateApplication() {
       };
       
       if (!appId) {
-        const res = await fetch('http://127.0.0.1:5000/api/applications', {
+        const res = await fetch('/api/applications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -265,7 +265,7 @@ export function CreateApplication() {
         const data = await res.json();
         if (data.id) setAppId(data.id);
       } else {
-        await fetch(`http://127.0.0.1:5000/api/applications/${appId}`, {
+        await fetch(`/api/applications/${appId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -296,7 +296,7 @@ export function CreateApplication() {
       };
       try {
         if (!appId) {
-          const res = await fetch('http://127.0.0.1:5000/api/applications', {
+          const res = await fetch('/api/applications', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -304,7 +304,7 @@ export function CreateApplication() {
           const data = await res.json();
           if (data.id) setAppId(data.id);
         } else {
-          await fetch(`http://127.0.0.1:5000/api/applications/${appId}`, {
+          await fetch(`/api/applications/${appId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -342,7 +342,7 @@ export function CreateApplication() {
     const schema = generateMockSchema(form.businessModules);
     setGeneratedSchema(schema);
     if (appId) {
-      await fetch(`http://127.0.0.1:5000/api/applications/${appId}/schema`, {
+      await fetch(`/api/applications/${appId}/schema`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schema_data: schema })
@@ -356,7 +356,7 @@ export function CreateApplication() {
     const apis = generateMockAPIs(form.businessModules);
     setGeneratedAPIs(apis);
     if (appId) {
-      await fetch(`http://127.0.0.1:5000/api/applications/${appId}/apis`, {
+      await fetch(`/api/applications/${appId}/apis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_data: apis })
@@ -369,7 +369,7 @@ export function CreateApplication() {
     setDeploymentStatus('deploying');
     if (appId) {
       try {
-        const res = await fetch(`http://127.0.0.1:5000/api/applications/${appId}/deploy`, {
+        const res = await fetch(`/api/applications/${appId}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deployment_type: form.deploymentType })
@@ -378,7 +378,7 @@ export function CreateApplication() {
         setDeploymentStatus('success');
         setDeploymentUrl(data.deployment.deployment_url);
         
-        await fetch(`http://127.0.0.1:5000/api/applications/${appId}`, {
+        await fetch(`/api/applications/${appId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'active' })

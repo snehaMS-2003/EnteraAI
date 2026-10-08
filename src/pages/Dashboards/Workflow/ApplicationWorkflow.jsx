@@ -38,7 +38,7 @@ export function ApplicationWorkflow() {
   useEffect(() => {
     const fetchApp = async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${id}`, {
+        const res = await fetch(`/api/designer/applications/${id}`, {
           headers: {
             'x-org-id': user?.organizationId,
             'x-user-id': user?.id,
@@ -59,7 +59,7 @@ export function ApplicationWorkflow() {
       }
     };
     if (user?.id) fetchApp();
-  }, [id, user, navigate]);
+  }, [id, user, navigate, basePath]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><div className="h-8 w-8 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" /></div>;

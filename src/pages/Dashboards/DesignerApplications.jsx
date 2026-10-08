@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
-import { Search, Filter, Layers, ExternalLink, Calendar, PenTool } from 'lucide-react';
+import { Search, Filter, Layers, ExternalLink, Calendar, PenTool, Plus, Play } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth, orgFetch } from '../../hooks/useAuth';
 
 export function DesignerApplications() {
   const { user } = useAuth();
@@ -18,13 +18,7 @@ export function DesignerApplications() {
   useEffect(() => {
     const fetchApps = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:5000/api/designer/applications', {
-          headers: {
-            'x-org-id': user?.organizationId,
-            'x-user-id': user?.id,
-            'x-user-email': user?.email
-          }
-        });
+        const response = await orgFetch('/api/designer/applications');
         if (response.ok) {
           const data = await response.json();
           setApplications(data);
@@ -52,6 +46,14 @@ export function DesignerApplications() {
           <h1 className="text-3xl font-bold tracking-tight">My Applications</h1>
           <p className="text-gray-400 mt-1">View and edit applications assigned to you.</p>
         </div>
+        {!loading && applications.length === 0 && (
+          <Link to={`${basePath}/apps/create`}>
+            <Button variant="primary" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Create Application
+            </Button>
+          </Link>
+        )}
       </div>
 
       <Card className="p-6">
@@ -131,12 +133,20 @@ export function DesignerApplications() {
                       {new Date(app.updated_at).toLocaleDateString()}
                     </td>
                     <td className="p-4">
-                      <Link to={`${basePath}/apps/${app.id}/workflow/basic`}>
-                        <Button variant="outline" size="sm" className="flex items-center gap-2">
-                          <ExternalLink className="h-4 w-4" />
-                          Open
-                        </Button>
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link to={`${basePath}/apps/${app.id}`}>
+                          <Button variant="outline" size="sm" className="flex items-center gap-2">
+                            <ExternalLink className="h-4 w-4" />
+                            Open
+                          </Button>
+                        </Link>
+                        <a href={`/preview/${app.id}`} target="_blank" rel="noopener noreferrer">
+                          <Button variant="primary" size="sm" className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 border-none">
+                            <Play className="h-3.5 w-3.5" />
+                            Preview
+                          </Button>
+                        </a>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}

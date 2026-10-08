@@ -24,7 +24,7 @@ export function BasicInfo({ application, onUpdate, basePath = `${basePath}` }) {
     if (e) e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}`, {
+      const res = await fetch(`/api/designer/applications/${application.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

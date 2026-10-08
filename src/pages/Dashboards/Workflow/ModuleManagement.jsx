@@ -26,7 +26,7 @@ export function ModuleManagement({ application, basePath = `${basePath}` }) {
   useEffect(() => {
     const fetchModules = async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/modules`, {
+        const res = await fetch(`/api/designer/applications/${application.id}/modules`, {
           headers: {
             'x-org-id': user?.organizationId,
             'x-user-id': user?.id,
@@ -58,7 +58,7 @@ export function ModuleManagement({ application, basePath = `${basePath}` }) {
       const payload = {
         modules: selectedModules.map(id => ({ module_id: id, is_enabled: true }))
       };
-      const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}/modules`, {
+      const res = await fetch(`/api/designer/applications/${application.id}/modules`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

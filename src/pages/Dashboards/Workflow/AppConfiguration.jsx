@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { Save, ArrowRight, ArrowLeft } from 'lucide-react';
 
-export function AppConfiguration({ application, onUpdate, basePath = `${basePath}` }) {
+export function AppConfiguration({ application, onUpdate, basePath = '/designer/dashboard' }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [deploymentType, setDeploymentType] = useState(application.deployment_type || 'cloud');
@@ -14,7 +13,7 @@ export function AppConfiguration({ application, onUpdate, basePath = `${basePath
   const handleSave = async (redirect = false) => {
     setSaving(true);
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/designer/applications/${application.id}`, {
+      const res = await fetch(`/api/designer/applications/${application.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
