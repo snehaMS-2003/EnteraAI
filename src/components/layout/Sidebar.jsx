@@ -11,12 +11,14 @@ import {
   Users
 } from 'lucide-react';
 import { cn } from '../ui/Button';
+import { useAuth } from '../../hooks/useAuth';
 
 export function Sidebar({ role = 'designer' }) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    // Basic logout handling
+    logout();
     navigate('/login');
   };
 

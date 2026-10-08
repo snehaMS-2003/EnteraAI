@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Server, Tag, LayoutDashboard, Calendar, User, 
-  Settings, Pencil, Check, X, Shield, Plus, Trash2, Power, AlertTriangle
+  Settings, Pencil, Check, X, Shield, Plus, Trash2, Power, AlertTriangle,
+  Rocket, ExternalLink, Eye, CheckCircle2
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -32,6 +33,8 @@ export function OrgApplicationDetails() {
 
   // Status State
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
 
   useEffect(() => {
     fetchApplicationDetails();
@@ -104,6 +107,45 @@ export function OrgApplicationDetails() {
       alert(err.message);
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    try {
+      const res = await orgFetch(`/api/org/applications/${id}/publish`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || (data.errors ? data.errors.join('\n') : 'Failed to publish application'));
+      }
+      alert(data.message || `Application published successfully as version ${data.version}!`);
+      fetchApplicationDetails();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!window.confirm('Are you sure you want to unpublish this application? Public runtime access will be deactivated, but all your data remains intact.')) {
+      return;
+    }
+    setUnpublishing(true);
+    try {
+      const res = await orgFetch(`/api/org/applications/${id}/unpublish`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to unpublish application');
+      alert(data.message || 'Application has been unpublished.');
+      fetchApplicationDetails();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUnpublishing(false);
     }
   };
 
@@ -316,6 +358,68 @@ export function OrgApplicationDetails() {
 
         {/* Right Column: Status & Actions */}
         <div className="space-y-6">
+          {/* Publishing & Deployment Card */}
+          <Card className="p-6 bg-gradient-to-br from-primary-950/30 to-dark-200 border-primary-500/20">
+            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Rocket className="h-4 w-4 text-primary-400" />
+              Publishing & Deployment
+            </h3>
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                <span className="text-gray-300 text-xs font-medium">Published Version</span>
+                <span className="font-mono text-xs font-bold text-white px-2 py-0.5 rounded bg-primary-500/20 text-primary-300 border border-primary-500/30">
+                  {app.published_version ? `v${app.published_version}` : 'v1.0 (Draft)'}
+                </span>
+              </div>
+
+              {app.status === 'published' ? (
+                <div className="space-y-2">
+                  <Button 
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white gap-2 text-xs py-2.5" 
+                    onClick={() => window.open(`/app/${(app.app_name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') || app.id}`, '_blank')}
+                  >
+                    <ExternalLink className="h-4 w-4" /> Open Live Application
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full text-primary-300 hover:text-white gap-2 text-xs py-2.5" 
+                    onClick={handlePublish}
+                    disabled={publishing}
+                  >
+                    <Rocket className="h-4 w-4" /> {publishing ? 'Publishing...' : 'Publish New Version'}
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    className="w-full gap-2 text-xs py-2.5" 
+                    onClick={handleUnpublish}
+                    disabled={unpublishing}
+                  >
+                    <Power className="h-4 w-4" /> {unpublishing ? 'Unpublishing...' : 'Unpublish Application'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Button 
+                    className="w-full bg-primary-600 hover:bg-primary-500 text-white gap-2 text-xs py-2.5" 
+                    onClick={handlePublish}
+                    disabled={publishing}
+                  >
+                    <Rocket className="h-4 w-4" /> {publishing ? 'Publishing...' : 'Publish Application'}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full gap-2 text-xs py-2.5" 
+                    onClick={() => window.open(`/preview/${app.id}`, '_blank')}
+                  >
+                    <Eye className="h-4 w-4 text-primary-400" /> Preview Application
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Lifecycle Status Card */}
           <Card className="p-6 bg-gradient-to-br from-white/5 to-transparent">
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
               Lifecycle Status
@@ -325,9 +429,11 @@ export function OrgApplicationDetails() {
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
                 <span className="text-gray-300 text-sm">Current Status</span>
                 <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                  app.status === 'published' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                  app.status === 'unpublished' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
                   app.status === 'active' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                  app.status === 'draft' ? 'bg-gray-500/20 text-gray-400 border-gray-500/30' :
-                  'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                  app.status === 'preview' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                  'bg-amber-500/20 text-amber-400 border-amber-500/30'
                 }`}>
                   {app.status}
                 </span>
@@ -336,40 +442,40 @@ export function OrgApplicationDetails() {
               <div className="space-y-2 mt-2">
                 {app.status === 'draft' && (
                   <Button 
-                    className="w-full bg-green-600 hover:bg-green-500 text-white" 
+                    className="w-full bg-green-600 hover:bg-green-500 text-white text-xs" 
                     onClick={() => handleUpdateStatus('active')}
                     disabled={updatingStatus}
                   >
-                    <Power className="h-4 w-4 mr-2" /> Activate Application
+                    <Power className="h-4 w-4 mr-2" /> Mark as Active
                   </Button>
                 )}
                 
                 {app.status === 'active' && (
                   <Button 
                     variant="secondary" 
-                    className="w-full border-orange-500/30 text-orange-400 hover:bg-orange-500/10" 
-                    onClick={() => handleUpdateStatus('inactive')}
+                    className="w-full border-orange-500/30 text-orange-400 hover:bg-orange-500/10 text-xs" 
+                    onClick={() => handleUpdateStatus('draft')}
                     disabled={updatingStatus}
                   >
-                    <Power className="h-4 w-4 mr-2" /> Deactivate Application
+                    <Power className="h-4 w-4 mr-2" /> Revert to Draft
                   </Button>
                 )}
 
-                {app.status === 'inactive' && (
+                {app.status === 'unpublished' && (
                   <Button 
                     variant="secondary" 
-                    className="w-full border-green-500/30 text-green-400 hover:bg-green-500/10" 
-                    onClick={() => handleUpdateStatus('active')}
+                    className="w-full border-green-500/30 text-green-400 hover:bg-green-500/10 text-xs" 
+                    onClick={() => handleUpdateStatus('draft')}
                     disabled={updatingStatus}
                   >
-                    <Power className="h-4 w-4 mr-2" /> Reactivate Application
+                    <Power className="h-4 w-4 mr-2" /> Restore to Draft
                   </Button>
                 )}
               </div>
               
               <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                <p>Status changes are immediately reflected across your organization. Users can only access active applications.</p>
+                <p>Status changes are immediately reflected across your organization. Only published applications are accessible via public runtime.</p>
               </div>
             </div>
           </Card>

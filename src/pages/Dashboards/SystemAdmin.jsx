@@ -3,11 +3,14 @@ import { motion } from 'framer-motion';
 import { Card } from '../../components/ui/Card';
 import { Building2, Network, Server, Users, Activity, CheckCircle, Database, Clock } from 'lucide-react';
 
+import { orgFetch } from '../../hooks/useAuth';
+
 export function SystemAdmin() {
   const [stats, setStats] = useState({
     totalOrganizations: 0,
     totalApplications: 0,
-    registeredUsers: 0
+    registeredUsers: 0,
+    apiRequestsPerMin: 0
   });
   const [activity, setActivity] = useState({ timeline: [], health: null });
   const [loading, setLoading] = useState(true);
@@ -19,16 +22,26 @@ export function SystemAdmin() {
 
   const fetchDashboardData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [statsRes, activityRes] = await Promise.all([
-        fetch('http://127.0.0.1:5000/api/sysadmin/stats', { headers: { 'x-user-role': 'sys_admin' } }),
-        fetch('http://127.0.0.1:5000/api/sysadmin/activity', { headers: { 'x-user-role': 'sys_admin' } })
+        orgFetch('/api/sysadmin/stats'),
+        orgFetch('/api/sysadmin/activity')
       ]);
 
-      if (!statsRes.ok || !activityRes.ok) throw new Error('Failed to fetch dashboard data');
+      if (!statsRes.ok) {
+        const err = await statsRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch dashboard stats');
+      }
+      if (!activityRes.ok) {
+        const err = await activityRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch dashboard activity');
+      }
       
-      setStats(await statsRes.json());
-      setActivity(await activityRes.json());
+      const statsData = await statsRes.json();
+      const activityData = await activityRes.json();
+      setStats(statsData);
+      setActivity(activityData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,7 +53,7 @@ export function SystemAdmin() {
     { title: 'Total Organizations', value: stats.totalOrganizations, icon: Building2, color: 'text-purple-500' },
     { title: 'Total Applications', value: stats.totalApplications, icon: Server, color: 'text-blue-500' },
     { title: 'Registered Users', value: stats.registeredUsers || 0, icon: Users, color: 'text-green-500' },
-    { title: 'API Requests / min', value: '—', icon: Network, color: 'text-orange-500' },
+    { title: 'API Requests / min', value: stats.apiRequestsPerMin, icon: Network, color: 'text-orange-500' },
   ];
 
   // SVG Chart Dimensions
@@ -70,9 +83,18 @@ export function SystemAdmin() {
               <div>
                 <p className="text-sm font-medium text-gray-400">{stat.title}</p>
                 {stat.title === 'API Requests / min' ? (
-                   <p className="text-xs text-gray-500 mt-1 italic">No API activity yet</p>
+                  loading ? (
+                    <p className="text-2xl font-bold text-white">...</p>
+                  ) : stat.value !== undefined ? (
+                    <div>
+                      <p className="text-2xl font-bold text-white">{stat.value}</p>
+                      <p className="text-[10px] text-emerald-400 font-medium">Real-time (rolling 60s)</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1 italic">Not available</p>
+                  )
                 ) : (
-                   <p className="text-2xl font-bold text-white">{loading ? '...' : stat.value}</p>
+                  <p className="text-2xl font-bold text-white">{loading ? '...' : stat.value}</p>
                 )}
               </div>
             </Card>
@@ -97,14 +119,14 @@ export function SystemAdmin() {
                     <Clock className="h-6 w-6 text-blue-500" />
                     <div>
                       <p className="text-xs text-gray-400">Uptime (30d)</p>
-                      <p className="font-bold text-white">{activity.health?.uptime || '99.99%'}</p>
+                      <p className="font-bold text-white">{activity.health?.uptime || 'Not available'}</p>
                     </div>
                   </div>
                   <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center gap-4">
                     <Database className="h-6 w-6 text-purple-500" />
                     <div>
                       <p className="text-xs text-gray-400">DB Latency</p>
-                      <p className="font-bold text-white">{activity.health?.dbLatency || '12ms'}</p>
+                      <p className="font-bold text-white">{activity.health?.dbLatency || 'Not available'}</p>
                     </div>
                   </div>
                </div>
@@ -116,7 +138,7 @@ export function SystemAdmin() {
            <h3 className="text-lg font-bold text-white mb-6">Platform Activity (Last 7 Days)</h3>
            {loading ? (
              <div className="flex-1 flex items-center justify-center text-gray-500">Loading activity...</div>
-           ) : activity.timeline?.length > 0 ? (
+           ) : activity.timeline?.some(d => d.users > 0 || d.orgs > 0) ? (
              <div className="flex-1 flex flex-col justify-end relative h-full">
                {/* Legend */}
                <div className="absolute top-0 right-0 flex gap-4 text-xs">

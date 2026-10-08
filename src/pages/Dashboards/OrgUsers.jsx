@@ -36,7 +36,7 @@ function fmtDate(dateStr) {
 
 // ─── Org Users Component ────────────────────────────────────────────────
 export function OrgUsers() {
-  const userAuth = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [users, setUsers] = useState([]);
@@ -50,6 +50,8 @@ export function OrgUsers() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
 
+  const [successMsg, setSuccessMsg] = useState('');
+
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [editDesigner, setEditDesigner] = useState(null);
@@ -57,16 +59,20 @@ export function OrgUsers() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [inviteModalData, setInviteModalData] = useState(null);
 
+  const orgId = user?.organizationId || user?.organization_id;
+
   useEffect(() => {
-    if (!userAuth || !userAuth.organizationId) {
-      navigate('/login');
-      return;
+    if (user && orgId) {
+      fetchData();
+    } else if (user && !orgId) {
+      setLoading(false);
+      setError('No organization ID associated with your account.');
     }
-    fetchData();
-  }, [userAuth, navigate]);
+  }, [user, orgId]);
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [dsRes, statRes, appRes] = await Promise.all([
         orgFetch('/api/org/users'),
@@ -74,7 +80,13 @@ export function OrgUsers() {
         orgFetch('/api/org/applications')
       ]);
 
-      if (dsRes.ok) setUsers(await dsRes.json());
+      if (dsRes.ok) {
+        setUsers(await dsRes.json());
+      } else {
+        const errData = await dsRes.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to load organization users');
+      }
+
       if (statRes.ok) setStats(await statRes.json());
       if (appRes.ok) setApplications(await appRes.json());
     } catch (err) {
@@ -86,18 +98,33 @@ export function OrgUsers() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
+    if (deleteTarget.id === user?.id) {
+      setError('You cannot delete your own administrator account.');
+      setDeleteTarget(null);
+      return;
+    }
     try {
       const res = await orgFetch(`/api/org/users/${deleteTarget.id}`, { method: 'DELETE' });
       if (res.ok) {
+        setSuccessMsg(`User ${deleteTarget.name} deleted successfully.`);
+        setTimeout(() => setSuccessMsg(''), 4000);
         setDeleteTarget(null);
         fetchData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Failed to delete user');
       }
     } catch (err) {
       console.error(err);
+      setError(err.message);
     }
   };
 
   const handleAction = async (userId, action) => {
+    if (userId === user?.id && action === 'deactivate') {
+      setError('You cannot deactivate your own administrator account.');
+      return;
+    }
     try {
       const res = await orgFetch(`/api/org/users/${userId}/${action}`, { method: 'POST' });
       const data = await res.json();
@@ -105,27 +132,29 @@ export function OrgUsers() {
         if (data.token) {
            const inviteLink = `${window.location.origin}/accept-invitation?token=${data.token}`;
            console.log(`[TESTING ONLY] Invitation link for user ${userId}: ${inviteLink}`);
-           const user = users.find(u => u.id === userId);
-           if (user) {
+           const targetUser = users.find(u => u.id === userId);
+           if (targetUser) {
              setInviteModalData({
-               name: user.name,
-               email: user.email,
-               role: user.role,
+               name: targetUser.name,
+               email: targetUser.email,
+               role: targetUser.role,
                inviteLink: inviteLink
              });
            } else {
-             alert(`${data.message}\n\nTesting Link:\n${inviteLink}\n\n(Link is also in the console)`);
+             setSuccessMsg(`${data.message}`);
+             setTimeout(() => setSuccessMsg(''), 4000);
            }
         } else {
-           alert(data.message || `Action ${action} successful`);
+           setSuccessMsg(data.message || `Action ${action} successful`);
+           setTimeout(() => setSuccessMsg(''), 4000);
         }
         fetchData();
       } else {
-        alert(data.error || `Failed to ${action} user`);
+        setError(data.error || `Failed to ${action} user`);
       }
     } catch (err) {
       console.error(err);
-      alert(`Error: ${err.message}`);
+      setError(`Error: ${err.message}`);
     }
   };
 
@@ -159,8 +188,16 @@ export function OrgUsers() {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-          {error}
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {successMsg && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-sm flex items-center justify-between">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg('')} className="text-emerald-400 hover:text-emerald-300"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -323,6 +360,9 @@ export function OrgUsers() {
                           )}
                           {d.status === 'active' && (
                             <button title="Deactivate" onClick={() => handleAction(d.id, 'deactivate')} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg"><Ban className="h-4 w-4" /></button>
+                          )}
+                          {d.status === 'inactive' && (
+                            <button title="Activate User" onClick={() => handleAction(d.id, 'activate')} className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg"><Power className="h-4 w-4" /></button>
                           )}
                           <button title="View" onClick={() => setViewDesigner(d)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg"><Eye className="h-4 w-4" /></button>
                           <button title="Edit" onClick={() => setEditDesigner(d)} className="p-1.5 text-gray-400 hover:text-primary-400 hover:bg-primary-500/10 rounded-lg"><Pencil className="h-4 w-4" /></button>

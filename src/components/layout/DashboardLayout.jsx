@@ -6,7 +6,7 @@ import { Input } from '../ui/Input';
 import { useAuth } from '../../hooks/useAuth';
 
 export function DashboardLayout({ role = 'designer' }) {
-  const user = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   // Authentication Guard
@@ -16,7 +16,10 @@ export function DashboardLayout({ role = 'designer' }) {
 
   // Role-based Authorization Guard
   if (role === 'sys_admin' && user.role !== 'sys_admin') {
-    return <Navigate to="/org-admin/dashboard" replace />;
+    if (user.role === 'org_admin') return <Navigate to="/org-admin/dashboard" replace />;
+    if (user.role === 'lead_designer') return <Navigate to="/lead-designer/dashboard" replace />;
+    if (user.role === 'designer') return <Navigate to="/designer/dashboard" replace />;
+    return <Navigate to="/login" replace />;
   }
   
   if (role === 'org_admin' && user.role !== 'org_admin' && user.role !== 'sys_admin') {
@@ -39,7 +42,7 @@ export function DashboardLayout({ role = 'designer' }) {
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('user');
+    logout();
     navigate('/login');
   };
 

@@ -5,13 +5,16 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { useAuth, orgFetch } from '../../hooks/useAuth';
+import { useApplicationContext } from '../../contexts/ApplicationContext';
 
 export function OrgCreateApplication() {
   const navigate = useNavigate();
-  const user = useAuth();
+  const { user } = useAuth();
+  const { refreshApplications } = useApplicationContext();
   
   // Data State
   const [templates, setTemplates] = useState([]);
+  const [existingApp, setExistingApp] = useState(null);
   
   // Form State
   const [form, setForm] = useState({
@@ -23,25 +26,17 @@ export function OrgCreateApplication() {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   // Initial Fetches
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
-        const [tplRes, orgRes, statsRes] = await Promise.all([
+        const [tplRes, orgRes, appsRes] = await Promise.all([
           orgFetch('/api/templates'),
           orgFetch('/api/org/profile'),
-          orgFetch('/api/orgadmin/stats')
+          orgFetch('/api/org/applications')
         ]);
-        
-        if (statsRes.ok) {
-          const stats = await statsRes.json();
-          if (stats.totalApplications >= 1) {
-            setError('Your organization already has an application. Only one application is allowed.');
-            setTimeout(() => navigate('/org-admin/dashboard/apps'), 3000);
-            return;
-          }
-        }
 
         if (tplRes.ok) setTemplates(await tplRes.json());
         if (orgRes.ok) {
@@ -49,6 +44,13 @@ export function OrgCreateApplication() {
           setForm(prev => ({ ...prev, industry: orgData.industry || '' }));
           if (!orgData.industry) {
             setError('Your organization must have an Industry defined before creating an application.');
+          }
+        }
+        if (appsRes.ok) {
+          const appsData = await appsRes.json();
+          if (appsData && appsData.length > 0) {
+            setExistingApp(appsData[0]);
+            setError(`This organization already has an application ("${appsData[0].app_name}"). Only one application per organization is allowed.`);
           }
         }
       } catch (err) {
@@ -65,6 +67,7 @@ export function OrgCreateApplication() {
     }
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
       const res = await orgFetch('/api/org/applications', {
         method: 'POST',
@@ -80,7 +83,11 @@ export function OrgCreateApplication() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create application');
       
-      navigate('/org-admin/dashboard/apps');
+      setSuccess('Application created successfully!');
+      setTimeout(async () => {
+        await refreshApplications();
+        navigate('/org-admin/dashboard/apps');
+      }, 1500);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -112,6 +119,12 @@ export function OrgCreateApplication() {
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-500 text-sm">
           {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="p-4 bg-green-500/10 border border-green-500/50 rounded-xl text-green-500 text-sm">
+          {success}
         </div>
       )}
 
@@ -194,7 +207,7 @@ export function OrgCreateApplication() {
           Cancel
         </Button>
         
-        <Button onClick={handleCreate} disabled={loading} className="gap-2 min-w-[120px]">
+        <Button onClick={handleCreate} disabled={loading || !!existingApp} className="gap-2 min-w-[120px]">
           {loading ? (
             <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
           ) : (

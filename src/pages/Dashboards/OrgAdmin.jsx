@@ -7,7 +7,7 @@ import { Users, FolderKanban, Briefcase, Plus, Eye, Code, Activity, LayoutDashbo
 import { useAuth, orgFetch } from '../../hooks/useAuth';
 
 export function OrgAdmin() {
-  const user = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   
   const [stats, setStats] = useState({
@@ -20,25 +20,31 @@ export function OrgAdmin() {
   
   const [recentApps, setRecentApps] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [orgProfile, setOrgProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      setLoading(true);
+      setError('');
       try {
-        const [statsRes, appsRes, activityRes] = await Promise.all([
+        const [statsRes, appsRes, activityRes, profileRes] = await Promise.all([
           orgFetch('/api/orgadmin/stats'),
           orgFetch('/api/org/applications'),
-          orgFetch('/api/orgadmin/activity')
+          orgFetch('/api/orgadmin/activity'),
+          orgFetch('/api/org/profile')
         ]);
         
         if (statsRes.ok) {
           const statsData = await statsRes.json();
           setStats(statsData);
+        } else {
+          console.warn('Failed to load stats');
         }
         
         if (appsRes.ok) {
           const appsData = await appsRes.json();
-          // Display top 5 recent applications
           setRecentApps(appsData.slice(0, 5));
         }
         
@@ -46,8 +52,14 @@ export function OrgAdmin() {
           const actData = await activityRes.json();
           setTimeline(actData.timeline || []);
         }
+
+        if (profileRes.ok) {
+          const profData = await profileRes.json();
+          setOrgProfile(profData);
+        }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
+        setError('Failed to load some organization dashboard data. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -58,8 +70,23 @@ export function OrgAdmin() {
   const maxActivity = Math.max(...timeline.map(d => Math.max(d.users, d.apps)), 10);
   const chartHeight = 160;
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="h-10 w-10 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
+        <p className="text-gray-400 text-sm">Loading organization dashboard...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Welcome, {user?.name || 'Administrator'}</h1>
@@ -86,7 +113,8 @@ export function OrgAdmin() {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-400">Organization</p>
-              <p className="text-lg font-bold text-white truncate max-w-[150px]">{user?.organizationName || 'Acme Corp'}</p>
+              <p className="text-lg font-bold text-white truncate max-w-[150px]" title={orgProfile?.name || user?.organizationName}>{orgProfile?.name || user?.organizationName || 'Organization'}</p>
+              <p className="text-xs text-gray-400 truncate max-w-[150px]" title={orgProfile?.admin_name || user?.name}>Admin: {orgProfile?.admin_name || user?.name || 'Administrator'}</p>
             </div>
           </div>
         </Card>
@@ -107,8 +135,15 @@ export function OrgAdmin() {
               <Activity className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-400">Active / Draft</p>
-              <p className="text-2xl font-bold text-white">{stats.activeApplications} <span className="text-gray-500 text-lg">/ {stats.draftApplications}</span></p>
+              <p className="text-sm font-medium text-gray-400">Application Status</p>
+              <p className="text-2xl font-bold text-white capitalize">
+                {stats.totalApplications > 0
+                  ? (recentApps[0]?.status || 'Draft')
+                  : 'None'}
+              </p>
+              <p className="text-xs text-gray-400 truncate max-w-[150px]">
+                {stats.totalApplications > 0 ? (recentApps[0]?.app_name || 'Active Application') : 'No application created'}
+              </p>
             </div>
           </div>
         </Card>
@@ -216,7 +251,7 @@ export function OrgAdmin() {
                         {new Date(app.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="icon" onClick={() => navigate(`/org-admin/dashboard/apps`)}>
+                        <Button variant="ghost" size="icon" onClick={() => navigate(`/org-admin/dashboard/apps/${app.id}`)} title="View Application Details">
                           <Eye className="h-4 w-4" />
                         </Button>
                       </td>

@@ -95,7 +95,34 @@ export function UserProfile() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    setSuccess('Profile updated successfully.');
+    setError('');
+    setSuccess('');
+    if (!form.name || !form.name.trim()) {
+      setError('Name is required.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await orgFetch('/api/users/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ name: form.name.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update profile');
+      }
+      setSuccess('Profile updated successfully.');
+      setProfile(prev => ({ ...prev, name: data.user.name }));
+      try {
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        stored.name = data.user.name;
+        localStorage.setItem('user', JSON.stringify(stored));
+      } catch {}
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (pageLoading) {

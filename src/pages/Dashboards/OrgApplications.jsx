@@ -124,7 +124,7 @@ function cap(str) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export function OrgApplications() {
   const navigate = useNavigate();
-  const user = useAuth();
+  const { user } = useAuth();
 
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -143,16 +143,14 @@ export function OrgApplications() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  // ── Redirect if not authenticated ──────────────────────────────────────────
-  useEffect(() => {
-    if (!user || !user.organizationId) {
-      navigate('/login');
-    }
-  }, [user, navigate]);
+  const orgId = user?.organizationId || user?.organization_id;
 
   // ── Fetch applications ─────────────────────────────────────────────────────
   const fetchApps = useCallback(async () => {
-    if (!user?.organizationId) return;
+    if (!orgId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {

@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Users, Search, Filter, Eye, ShieldAlert, CheckCircle2, Trash2 } from 'lucide-react';
+import { Users, Search, Filter, ShieldAlert, Trash2, Power, PowerOff } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
+import { orgFetch } from '../../hooks/useAuth';
 
 function StatusBadge({ status }) {
   const styles = {
     active: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     pending: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    invited: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
     inactive: 'bg-gray-500/10 text-gray-400 border-gray-500/20'
   };
   const style = styles[status] || styles.inactive;
@@ -23,7 +25,11 @@ function StatusBadge({ status }) {
 
 function fmtDate(dateStr) {
   if (!dateStr) return '—';
-  return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(dateStr));
+  try {
+    return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(dateStr));
+  } catch {
+    return '—';
+  }
 }
 
 export function SysAdminUsers() {
@@ -31,6 +37,7 @@ export function SysAdminUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionMsg, setActionMsg] = useState({ type: '', text: '' });
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,13 +51,15 @@ export function SysAdminUsers() {
 
   const fetchUsers = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('http://127.0.0.1:5000/api/sysadmin/users', {
-        headers: { 'x-user-role': 'sys_admin' }
-      });
-      if (!response.ok) throw new Error('Failed to fetch platform users');
+      const response = await orgFetch('/api/sysadmin/users');
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch platform users');
+      }
       const data = await response.json();
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -58,26 +67,63 @@ export function SysAdminUsers() {
     }
   };
 
+  const handleToggleStatus = async (userId, currentStatus, userName) => {
+    const action = currentStatus === 'active' ? 'deactivate' : 'activate';
+    if (!window.confirm(`Are you sure you want to ${action} user "${userName}"?`)) {
+      return;
+    }
+    setActionMsg({ type: '', text: '' });
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    try {
+      const response = await orgFetch(`/api/sysadmin/users/${userId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Unable to ${action} user`);
+      }
+
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+      setActionMsg({
+        type: 'success',
+        text: `User "${userName}" ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully.`
+      });
+    } catch (err) {
+      setActionMsg({
+        type: 'error',
+        text: err.message
+      });
+    }
+  };
+
   const handleDeleteUser = async (userId, userName) => {
     if (!window.confirm(`Are you sure you want to delete the user "${userName}"? This action cannot be undone.`)) {
       return;
     }
-    
+    setActionMsg({ type: '', text: '' });
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/sysadmin/users/${userId}`, {
-        method: 'DELETE',
-        headers: { 'x-user-role': 'sys_admin' }
+      const response = await orgFetch(`/api/sysadmin/users/${userId}`, {
+        method: 'DELETE'
       });
       
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to delete user');
+        throw new Error(errData.error || 'Unable to delete user');
       }
       
       // Update state locally
       setUsers(users.filter(u => u.id !== userId));
+      setActionMsg({
+        type: 'success',
+        text: `User "${userName}" deleted successfully.`
+      });
     } catch (err) {
-      alert(err.message);
+      setActionMsg({
+        type: 'error',
+        text: err.message
+      });
     }
   };
 
@@ -87,12 +133,14 @@ export function SysAdminUsers() {
       (u.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter ? u.status === statusFilter : true;
     const matchesRole = roleFilter ? u.role === roleFilter : true;
-    const matchesOrg = orgFilter ? u.organization_name === orgFilter : true;
+    const orgName = u.organization_name || 'System';
+    const matchesOrg = orgFilter ? orgName === orgFilter : true;
     return matchesSearch && matchesStatus && matchesRole && matchesOrg;
   });
 
-  const uniqueOrgs = [...new Set(users.map(u => u.organization_name).filter(Boolean))];
-  const uniqueRoles = [...new Set(users.map(u => u.role).filter(Boolean))];
+  const defaultRoles = ['sys_admin', 'org_admin', 'designer', 'lead_designer', 'app_admin', 'user'];
+  const uniqueRoles = [...new Set([...defaultRoles, ...users.map(u => u.role).filter(Boolean)])];
+  const uniqueOrgs = ['System', ...new Set(users.map(u => u.organization_name).filter(Boolean))];
 
   return (
     <div className="space-y-6">
@@ -102,6 +150,17 @@ export function SysAdminUsers() {
           <p className="text-gray-400">View and manage all users across all registered organizations.</p>
         </div>
       </div>
+
+      {actionMsg.text && (
+        <div className={`p-4 rounded-xl border flex items-center justify-between ${
+          actionMsg.type === 'success' 
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+            : 'bg-red-500/10 border-red-500/30 text-red-400'
+        }`}>
+          <span>{actionMsg.text}</span>
+          <button onClick={() => setActionMsg({ type: '', text: '' })} className="text-xs opacity-70 hover:opacity-100 font-bold ml-4">✕</button>
+        </div>
+      )}
 
       <Card className="p-6">
         <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -119,6 +178,7 @@ export function SysAdminUsers() {
               <option value="" className="bg-gray-900 text-white">All Statuses</option>
               <option value="active" className="bg-gray-900 text-white">Active</option>
               <option value="pending" className="bg-gray-900 text-white">Pending</option>
+              <option value="invited" className="bg-gray-900 text-white">Invited</option>
               <option value="inactive" className="bg-gray-900 text-white">Inactive</option>
             </Select>
           </div>
@@ -154,13 +214,14 @@ export function SysAdminUsers() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-white/10 text-xs font-semibold text-gray-500 tracking-wider uppercase">
+                <tr className="border-b border-white/10 text-xs font-semibold text-gray-400 tracking-wider uppercase">
                   <th className="px-5 py-4">User</th>
                   <th className="px-5 py-4">Organization</th>
                   <th className="px-5 py-4">Role</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4 hidden md:table-cell">Reg. Date</th>
                   <th className="px-5 py-4 hidden lg:table-cell">Last Login</th>
+                  <th className="px-5 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -174,22 +235,11 @@ export function SysAdminUsers() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 rounded-full bg-primary-500/20 text-primary-400 flex items-center justify-center font-bold">
-                            {u.name.charAt(0).toUpperCase()}
+                            {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div>
-                              <p className="font-medium text-white">{u.name}</p>
-                              <p className="text-xs text-gray-500">{u.email}</p>
-                            </div>
-                            {u.role !== 'sys_admin' && (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleDeleteUser(u.id, u.name); }}
-                                className="p-1 text-red-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-red-500/10 ml-2" 
-                                title="Delete User"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
+                          <div>
+                            <p className="font-medium text-white">{u.name}</p>
+                            <p className="text-xs text-gray-500">{u.email}</p>
                           </div>
                         </div>
                       </td>
@@ -208,10 +258,36 @@ export function SysAdminUsers() {
                       <td className="px-5 py-4 hidden lg:table-cell text-xs text-gray-400">
                         {fmtDate(u.last_active)}
                       </td>
+                      <td className="px-5 py-4 text-right">
+                        {u.role !== 'sys_admin' ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleToggleStatus(u.id, u.status, u.name)}
+                              className={`p-1.5 rounded transition-colors ${
+                                u.status === 'active' 
+                                  ? 'text-gray-400 hover:text-amber-400 hover:bg-amber-500/10' 
+                                  : 'text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                              }`}
+                              title={u.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                            >
+                              {u.status === 'active' ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteUser(u.id, u.name)}
+                              className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors" 
+                              title="Delete User"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-600 italic">Protected</span>
+                        )}
+                      </td>
                     </motion.tr>
                   ))}
                   {filteredUsers.length === 0 && (
-                     <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-500">No users match your filters.</td></tr>
+                     <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-500">No users match your filters.</td></tr>
                   )}
                 </AnimatePresence>
               </tbody>
