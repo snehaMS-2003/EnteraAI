@@ -120,12 +120,36 @@ const initDB = async () => {
     // Ensure status and last_active columns exist for older users
     await client.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(255);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS invitation_token_hash TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS invitation_expires_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP;
+      ALTER TABLE organizations ADD COLUMN IF NOT EXISTS username VARCHAR(255);
+      
+      UPDATE users SET username = name WHERE username IS NULL OR username = '';
+      UPDATE users SET username = 'admin' WHERE LOWER(email) = 'admin@gmail.com' AND (username IS NULL OR username = '' OR username = 'System Administrator');
+      UPDATE organizations SET username = admin_name WHERE username IS NULL OR username = '';
+      
+      CREATE INDEX IF NOT EXISTS idx_users_lower_username ON users (LOWER(username));
+    `);
+
+    // Password Reset Tokens Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        email VARCHAR(255) NOT NULL,
+        token_hash VARCHAR(255) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_password_reset_token_hash ON password_reset_tokens (token_hash);
+      CREATE INDEX IF NOT EXISTS idx_password_reset_email ON password_reset_tokens (email);
+      CREATE INDEX IF NOT EXISTS idx_password_reset_user_id ON password_reset_tokens (user_id);
     `);
 
     // Ensure sysadmin user role and org are correct
@@ -149,25 +173,6 @@ const initDB = async () => {
       console.log(`Initial System Administrator initialized (${defaultAdminEmail}).`);
     }
 
-    // Ensure default test Designer exists for TechCorp Solutions (Org 7)
-    const designerCheck = await client.query("SELECT id FROM users WHERE LOWER(email) = 'sneha123@gmail.com'");
-    if (designerCheck.rows.length === 0) {
-      const designerHash = await bcrypt.hash('password123', 10);
-      const designerRes = await client.query(`
-        INSERT INTO users (organization_id, name, email, password_hash, role, status, created_at)
-        VALUES (7, 'sneha', 'sneha123@gmail.com', $1, 'designer', 'active', CURRENT_TIMESTAMP)
-        ON CONFLICT (email) DO UPDATE SET password_hash = $1, status = 'active', role = 'designer', organization_id = 7
-        RETURNING id;
-      `, [designerHash]);
-      if (designerRes.rows.length > 0) {
-        await client.query(`
-          INSERT INTO designer_applications (designer_id, application_id)
-          VALUES ($1, 5)
-          ON CONFLICT DO NOTHING;
-        `, [designerRes.rows[0].id]);
-        console.log('Default Designer initialized (sneha123@gmail.com).');
-      }
-    }
 
     // Designer Applications Table (Many-to-Many mapping)
     await client.query(`
@@ -178,6 +183,40 @@ const initDB = async () => {
         PRIMARY KEY (designer_id, application_id)
       );
     `);
+
+    // Ensure default test Application Admin John exists with role 'app_admin' and is assigned to Application 5
+    const johnHash = await bcrypt.hash('john@123', 10);
+    const johnRes = await client.query(`
+      INSERT INTO users (organization_id, name, username, email, password_hash, role, status, created_at)
+      VALUES (7, 'John', 'john', 'john@gmail.com', $1, 'app_admin', 'active', CURRENT_TIMESTAMP)
+      ON CONFLICT (email) DO UPDATE SET password_hash = $1, status = 'active', role = 'app_admin', username = 'john', organization_id = 7
+      RETURNING id;
+    `, [johnHash]);
+    if (johnRes.rows.length > 0) {
+      await client.query(`
+        INSERT INTO designer_applications (designer_id, application_id)
+        VALUES ($1, 5)
+        ON CONFLICT DO NOTHING;
+      `, [johnRes.rows[0].id]);
+      console.log('Default Application Admin initialized (john@gmail.com).');
+    }
+
+    // Ensure default test User Tom exists with role 'user' and is assigned to Application 5
+    const tomHash = await bcrypt.hash('tom@123', 10);
+    const tomRes = await client.query(`
+      INSERT INTO users (organization_id, name, username, email, password_hash, role, status, created_at)
+      VALUES (7, 'Tom', 'tom123', 'tom123@gmail.com', $1, 'user', 'active', CURRENT_TIMESTAMP)
+      ON CONFLICT (email) DO UPDATE SET password_hash = $1, status = 'active', role = 'user', username = 'tom123', organization_id = 7
+      RETURNING id;
+    `, [tomHash]);
+    if (tomRes.rows.length > 0) {
+      await client.query(`
+        INSERT INTO designer_applications (designer_id, application_id)
+        VALUES ($1, 5)
+        ON CONFLICT DO NOTHING;
+      `, [tomRes.rows[0].id]);
+      console.log('Default User initialized (tom123@gmail.com / tom123).');
+    }
 
     // Applications Table (org-scoped)
     await client.query(`

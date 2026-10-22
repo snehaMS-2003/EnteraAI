@@ -10,6 +10,8 @@ import { LandingPage } from './pages/LandingPage';
 import { Login } from './pages/Auth/Login';
 import { Register } from './pages/Auth/Register';
 import { AcceptInvite } from './pages/Auth/AcceptInvite';
+import { ForgotPassword } from './pages/Auth/ForgotPassword';
+import { ResetPassword } from './pages/Auth/ResetPassword';
 
 // Dashboards
 import { AppDesigner } from './pages/Dashboards/AppDesigner';
@@ -32,7 +34,11 @@ import { DatabaseSchemasStandalone } from './pages/Dashboards/DatabaseSchemasSta
 import { RestApisStandalone } from './pages/Dashboards/RestApisStandalone';
 import { DesignerCreateApplication } from './pages/Dashboards/DesignerCreateApplication';
 import { DesignerApplicationBuilder } from './pages/Dashboards/DesignerApplicationBuilder';
+import { AppAdminDashboard } from './pages/Dashboards/AppAdminDashboard';
+import { UserDashboard } from './pages/Dashboards/UserDashboard';
+import { UserApplications } from './pages/Dashboards/UserApplications';
 import { AppRuntime } from './pages/Runtime/AppRuntime';
+import { AccessDenied } from './pages/AccessDenied';
 import { NotFound } from './pages/NotFound';
 
 import { AuthProvider } from './contexts/AuthContext';
@@ -53,6 +59,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/accept-invite" element={<AcceptInvite />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Configured Application Direct Runtime Routes */}
           <Route path="/students" element={<AppRuntime directRouteSlug="students" />} />
@@ -109,6 +117,25 @@ function App() {
             <Route path="settings" element={<UserProfile />} />
           </Route>
           
+          {/* App Admin Dashboard */}
+          <Route path="/app-admin/dashboard" element={<DashboardLayout role="app_admin" />}>
+            <Route index element={<AppAdminDashboard />} />
+            <Route path="apps" element={<DesignerApplications />} />
+            <Route path="apps/:id/*" element={<DesignerApplicationBuilder />} />
+            <Route path="users" element={<OrgUsers />} />
+            <Route path="settings" element={<UserProfile />} />
+          </Route>
+
+          {/* User Dashboard */}
+          <Route path="/user/dashboard" element={<DashboardLayout role="user" />}>
+            <Route index element={<UserDashboard />} />
+            <Route path="apps" element={<UserApplications />} />
+            <Route path="settings" element={<UserProfile />} />
+          </Route>
+
+          {/* Access Denied Route */}
+          <Route path="/access-denied" element={<AccessDenied />} />
+
           {/* Fallback — 404 Not Found */}
           <Route path="*" element={<NotFound />} />
         </Routes>

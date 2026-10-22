@@ -5,6 +5,8 @@ import { Search, Bell, User, LogOut } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { useAuth } from '../../hooks/useAuth';
 
+import { AccessDenied } from '../../pages/AccessDenied';
+
 export function DashboardLayout({ role = 'designer' }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -14,37 +16,31 @@ export function DashboardLayout({ role = 'designer' }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Role-based Authorization Guard
-  if (role === 'sys_admin' && user.role !== 'sys_admin') {
-    if (user.role === 'org_admin') return <Navigate to="/org-admin/dashboard" replace />;
-    if (user.role === 'lead_designer') return <Navigate to="/lead-designer/dashboard" replace />;
-    if (user.role === 'designer') return <Navigate to="/designer/dashboard" replace />;
-    return <Navigate to="/login" replace />;
-  }
-  
-  if (role === 'org_admin' && user.role !== 'org_admin' && user.role !== 'sys_admin') {
-    return <Navigate to="/lead-designer/dashboard" replace />;
-  }
-
-  if (role === 'lead_designer' && user.role !== 'lead_designer' && user.role !== 'org_admin' && user.role !== 'sys_admin') {
-    return <Navigate to="/designer/dashboard" replace />;
-  }
-
-  // If role is designer, redirect higher roles to their proper dashboards so they don't get stuck.
-  if (role === 'designer') {
-    if (user.role === 'sys_admin') {
-      return <Navigate to="/admin/dashboard" replace />;
-    } else if (user.role === 'org_admin') {
-      return <Navigate to="/org-admin/dashboard" replace />;
-    } else if (user.role === 'lead_designer') {
-      return <Navigate to="/lead-designer/dashboard" replace />;
-    }
-  }
-
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  // Role-based Authorization Guard
+  const userRole = (user.role || '').toLowerCase();
+  const routeRole = (role || '').toLowerCase();
+
+  let isAuthorized = false;
+  if (routeRole === 'sys_admin') {
+    isAuthorized = (userRole === 'sys_admin');
+  } else if (routeRole === 'org_admin') {
+    isAuthorized = (userRole === 'org_admin' || userRole === 'sys_admin');
+  } else if (routeRole === 'app_admin') {
+    isAuthorized = (userRole === 'app_admin' || userRole === 'org_admin' || userRole === 'sys_admin');
+  } else if (routeRole === 'designer' || routeRole === 'lead_designer') {
+    isAuthorized = (userRole === 'designer' || userRole === 'lead_designer' || userRole === 'org_admin' || userRole === 'sys_admin');
+  } else if (routeRole === 'user') {
+    isAuthorized = (userRole === 'user' || userRole === 'org_admin' || userRole === 'sys_admin');
+  }
+
+  if (!isAuthorized) {
+    return <AccessDenied />;
+  }
 
   return (
     <div className="min-h-screen flex bg-background">

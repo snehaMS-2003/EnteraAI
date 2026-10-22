@@ -15,7 +15,9 @@ import { useAuth } from '../../hooks/useAuth';
 
 export function Sidebar({ role = 'designer' }) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+
+  const activeRole = (user?.role || role || '').toLowerCase();
 
   const handleLogout = () => {
     logout();
@@ -23,23 +25,7 @@ export function Sidebar({ role = 'designer' }) {
   };
 
   const getLinksByRole = () => {
-    if (role === 'designer') {
-      return [
-        { name: 'Dashboard', path: '/designer/dashboard', icon: LayoutDashboard },
-        { name: 'My Applications', path: '/designer/dashboard/apps', icon: FolderKanban },
-        { name: 'Database Schemas', path: '/designer/dashboard/database-schemas', icon: Database },
-        { name: 'REST APIs', path: '/designer/dashboard/apis', icon: Network },
-      ];
-    }
-    if (role === 'lead_designer') {
-      return [
-        { name: 'Dashboard', path: '/lead-designer/dashboard', icon: LayoutDashboard },
-        { name: 'Applications', path: '/lead-designer/dashboard/apps', icon: FolderKanban },
-        { name: 'Database Schemas', path: '/lead-designer/dashboard/database-schemas', icon: Database },
-        { name: 'REST APIs', path: '/lead-designer/dashboard/apis', icon: Network },
-      ];
-    }
-    if (role === 'org_admin') {
+    if (activeRole === 'org_admin') {
       return [
         { name: 'Dashboard', path: '/org-admin/dashboard', icon: LayoutDashboard },
         { name: 'Applications', path: '/org-admin/dashboard/apps', icon: FolderKanban },
@@ -49,7 +35,28 @@ export function Sidebar({ role = 'designer' }) {
         { name: 'Organization Profile', path: '/org-admin/dashboard/profile', icon: Settings },
       ];
     }
-    if (role === 'sys_admin') {
+    if (activeRole === 'app_admin') {
+      return [
+        { name: 'Dashboard', path: '/app-admin/dashboard', icon: LayoutDashboard },
+        { name: 'Applications', path: '/app-admin/dashboard/apps', icon: FolderKanban },
+        { name: 'Users', path: '/app-admin/dashboard/users', icon: Users },
+      ];
+    }
+    if (activeRole === 'designer' || activeRole === 'lead_designer') {
+      return [
+        { name: 'Dashboard', path: '/designer/dashboard', icon: LayoutDashboard },
+        { name: 'Applications', path: '/designer/dashboard/apps', icon: FolderKanban },
+        { name: 'Database Schemas', path: '/designer/dashboard/database-schemas', icon: Database },
+        { name: 'REST APIs', path: '/designer/dashboard/apis', icon: Network },
+      ];
+    }
+    if (activeRole === 'user') {
+      return [
+        { name: 'Dashboard', path: '/user/dashboard', icon: LayoutDashboard },
+        { name: 'My Applications', path: '/user/dashboard/apps', icon: FolderKanban },
+      ];
+    }
+    if (activeRole === 'sys_admin') {
       return [
         { name: 'Overview', path: '/admin/dashboard', icon: LayoutDashboard },
         { name: 'Organizations', path: '/admin/dashboard/orgs', icon: Users },
@@ -60,10 +67,11 @@ export function Sidebar({ role = 'designer' }) {
   };
 
   const getSettingsPath = () => {
-    if (role === 'designer') return '/designer/dashboard/settings';
-    if (role === 'lead_designer') return '/lead-designer/dashboard/settings';
-    if (role === 'org_admin') return '/org-admin/dashboard/settings';
-    if (role === 'sys_admin') return '/admin/dashboard/settings';
+    if (activeRole === 'org_admin') return '/org-admin/dashboard/settings';
+    if (activeRole === 'app_admin') return '/app-admin/dashboard/settings';
+    if (activeRole === 'designer' || activeRole === 'lead_designer') return '/designer/dashboard/settings';
+    if (activeRole === 'user') return '/user/dashboard/settings';
+    if (activeRole === 'sys_admin') return '/admin/dashboard/settings';
     return '/settings';
   };
 
