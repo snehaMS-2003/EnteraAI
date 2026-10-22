@@ -1,0 +1,63 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.0, pytest-9.1.1, pluggy-1.7.0 -- C:\Users\sneha\AppData\Local\Programs\Python\Python314\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\sneha\Downloads\Entera_Project
+collecting ... collected 5 items
+
+test_rbac.py::test_tc005_01_authorized_page_access 
+======================================================================
+STARTING TEST TC_005_01: Authorized Page Access
+Test User: tom123@gmail.com (Role: user)
+Target Route: http://localhost:5173/user/dashboard
+======================================================================
+  [OK] Redirection verified. Current URL: http://localhost:5173/user/dashboard
+  [OK] Welcome heading displayed: 'Welcome back, Tom!'
+  [OK] Role badge verified: 'Role: User'
+  [OK] Capturing authorized access screenshot: C:\Users\sneha\Downloads\Entera_Project\screenshots\tc005_rbac_authorized.png...
+  [OK] Saved authorized screenshot (99064 bytes).
+TC_005_01 STATUS: PASS
+PASSED
+test_rbac.py::test_tc005_02_restricted_page_access 
+======================================================================
+STARTING TEST TC_005_02: Restricted Page Access
+Test User: tom123@gmail.com (Role: user)
+Restricted Route Attempted: http://localhost:5173/admin/dashboard
+======================================================================
+  Navigating directly to restricted route: http://localhost:5173/admin/dashboard...
+  [OK] Access Denied component rendered with HTTP 403 Forbidden indicator.
+  [OK] Role-specific explanation verified: 'You do not have permission to access this page with your current role [USER].'
+  [OK] Capturing restricted access screenshot: C:\Users\sneha\Downloads\Entera_Project\screenshots\tc005_rbac_restricted.png...
+  [OK] Saved restricted screenshot (35963 bytes).
+TC_005_02 STATUS: PASS
+PASSED
+test_rbac.py::test_tc005_03_navigation_permission_checks 
+======================================================================
+STARTING TEST TC_005_03: Navigation Permission Checks
+Test User: tom123@gmail.com (Role: user)
+======================================================================
+  [OK] Sidebar links displayed for user 'tom123@gmail.com': ['Dashboard', 'My Applications', 'Settings']
+  [OK] Confirmed restricted links (Organizations, Platform Users, Schemas, APIs) are hidden.
+TC_005_03 STATUS: PASS
+PASSED
+test_rbac.py::test_tc005_04_direct_url_access_blocked 
+======================================================================
+STARTING TEST TC_005_04: Direct URL Access Enforcement
+Test User: tom123@gmail.com (Role: user)
+Direct Target: http://localhost:5173/admin/dashboard/users
+======================================================================
+  [OK] Direct URL access intercepted by authorization guard.
+  [OK] Safely returned to authorized user dashboard: http://localhost:5173/user/dashboard
+TC_005_04 STATUS: PASS
+PASSED
+test_rbac.py::test_tc005_05_backend_authorization_enforced 
+======================================================================
+STARTING TEST TC_005_05: Backend Authorization API Enforcement
+Test User: tom123@gmail.com (Role: user)
+Target API: http://localhost:5000/api/sysadmin/users
+======================================================================
+  [OK] Authenticated user retrieved: ID=16, Role=user
+  [OK] Backend correctly rejected unauthorized API request with HTTP 403: {'error': 'Forbidden: System Administrator access required'}
+TC_005_05 STATUS: PASS
+PASSED
+
+======================== 5 passed in 65.14s (0:01:05) =========================
