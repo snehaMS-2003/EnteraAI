@@ -8,6 +8,13 @@ function normalizeUser(rawUser) {
   const orgId = user.organizationId || user.organization_id || null;
   user.organizationId = orgId ? Number(orgId) : null;
   user.organization_id = user.organizationId;
+  const uid = user.id || user.userId || user.user_id || null;
+  user.id = uid ? (isNaN(Number(uid)) ? uid : Number(uid)) : null;
+  user.userId = user.id;
+  user.user_id = user.id;
+  if (user.role) {
+    user.role = String(user.role).toLowerCase().trim().replace(/[-\s]+/g, '_');
+  }
   return user;
 }
 

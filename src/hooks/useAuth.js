@@ -23,10 +23,12 @@ export function orgFetch(path, options = {}) {
 
   if (user) {
     const orgId = user.organizationId || user.organization_id;
+    const uid = user.id || user.userId || user.user_id;
+    const role = user.role ? String(user.role).toLowerCase().trim().replace(/[-\s]+/g, '_') : null;
     if (orgId) headers['X-Org-Id'] = String(orgId);
-    if (user.id) headers['X-User-Id'] = String(user.id);
+    if (uid) headers['X-User-Id'] = String(uid);
     if (user.email) headers['X-User-Email'] = user.email;
-    if (user.role) headers['X-User-Role'] = user.role;
+    if (role) headers['X-User-Role'] = role;
   }
 
   return fetch(buildApiUrl(path), {
