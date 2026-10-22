@@ -28,24 +28,26 @@ export function AppDesigner() {
 
   const basePath = user?.role === 'lead_designer' ? '/lead-designer/dashboard' : '/designer/dashboard';
 
-  useEffect(() => {
-    const fetchWorkspace = async () => {
-      try {
-        setLoading(true);
-        const res = await orgFetch('/api/designer/workspace');
-        if (!res.ok) {
-          throw new Error('Failed to load designer workspace. Status: ' + res.status);
-        }
-        const data = await res.json();
-        setWorkspace(data);
-      } catch (err) {
-        console.error('Failed to fetch designer workspace:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+  const fetchWorkspace = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await orgFetch('/api/designer/workspace');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || ('Failed to load designer workspace. Status: ' + res.status));
       }
-    };
+      const data = await res.json();
+      setWorkspace(data);
+    } catch (err) {
+      console.error('Failed to fetch designer workspace:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (user?.id) {
       fetchWorkspace();
     }
@@ -60,15 +62,21 @@ export function AppDesigner() {
   }
 
   if (error) {
+    const isPermissionError = error.toLowerCase().includes('permission') || 
+                              error.toLowerCase().includes('access denied') || 
+                              error.toLowerCase().includes('forbidden') || 
+                              error.includes('403');
     return (
       <Card className="p-6 bg-red-500/10 border-red-500/50">
         <div className="flex flex-col items-center justify-center text-center space-y-4">
           <Activity className="h-12 w-12 text-red-400" />
           <div>
-            <h2 className="text-xl font-bold text-white">Workspace Unavailable</h2>
+            <h2 className="text-xl font-bold text-white">
+              {isPermissionError ? 'Access Restricted' : 'Workspace Unavailable'}
+            </h2>
             <p className="text-red-400 text-sm mt-1">{error}</p>
           </div>
-          <Button variant="outline" className="mt-4 border-red-500/50 text-red-400 hover:bg-red-500/20" onClick={() => window.location.reload()}>
+          <Button variant="outline" className="mt-4 border-red-500/50 text-red-400 hover:bg-red-500/20" onClick={() => fetchWorkspace()}>
             Retry Connection
           </Button>
         </div>

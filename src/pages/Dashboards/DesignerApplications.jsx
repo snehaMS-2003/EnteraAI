@@ -11,24 +11,36 @@ export function DesignerApplications() {
   const { user } = useAuth();
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   
   const basePath = user?.role === 'lead_designer' ? '/lead-designer/dashboard' : '/designer/dashboard';
 
-  useEffect(() => {
-    const fetchApps = async () => {
-      try {
-        const response = await orgFetch('/api/designer/applications');
-        if (response.ok) {
-          const data = await response.json();
-          setApplications(data);
+  const fetchApps = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await orgFetch('/api/designer/applications');
+      if (response.ok) {
+        const data = await response.json();
+        setApplications(data || []);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 403) {
+          setError(errData.error || 'Access Denied: Insufficient permissions to view applications.');
+        } else {
+          setError(errData.error || ('Failed to load applications. Status: ' + response.status));
         }
-      } catch (err) {
-        console.error('Failed to fetch applications:', err);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch applications:', err);
+      setError(err.message || 'Failed to load applications');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     if (user?.id) {
       fetchApps();
     }
@@ -39,6 +51,13 @@ export function DesignerApplications() {
     (app.industry && app.industry.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  const isPermissionError = error && (
+    error.toLowerCase().includes('permission') || 
+    error.toLowerCase().includes('access denied') || 
+    error.toLowerCase().includes('forbidden') ||
+    error.includes('403')
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -46,7 +65,7 @@ export function DesignerApplications() {
           <h1 className="text-3xl font-bold tracking-tight">My Applications</h1>
           <p className="text-gray-400 mt-1">View and edit applications assigned to you.</p>
         </div>
-        {!loading && applications.length === 0 && (
+        {!loading && !error && applications.length === 0 && (
           <Link to={`${basePath}/apps/create`}>
             <Button variant="primary" className="gap-2">
               <Plus className="h-4 w-4" />
@@ -78,6 +97,20 @@ export function DesignerApplications() {
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-8 w-8 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="p-8 bg-red-500/10 border border-red-500/50 rounded-xl text-center space-y-4 max-w-lg mx-auto my-4">
+            <h3 className="text-xl font-bold text-red-400">
+              {isPermissionError ? 'Access Restricted' : 'Failed to load applications'}
+            </h3>
+            <p className="text-red-400/80 text-sm">{error}</p>
+            <Button 
+              variant="outline" 
+              className="mt-2 border-red-500/50 text-red-400 hover:bg-red-500/20" 
+              onClick={() => fetchApps()}
+            >
+              Retry Connection
+            </Button>
           </div>
         ) : filteredApps.length === 0 ? (
           <div className="text-center py-16 border-2 border-dashed border-white/10 rounded-xl">

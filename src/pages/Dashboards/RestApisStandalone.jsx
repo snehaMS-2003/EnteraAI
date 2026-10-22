@@ -2,9 +2,10 @@ import React from 'react';
 import { useApplicationContext } from '../../contexts/ApplicationContext';
 import { ApiManagement } from './Workflow/ApiManagement';
 import { Network, ChevronDown } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 
 export function RestApisStandalone() {
-  const { applications, selectedAppId, setSelectedAppId, selectedApp, loading, error } = useApplicationContext();
+  const { applications, selectedAppId, setSelectedAppId, selectedApp, loading, error, refreshApplications } = useApplicationContext();
 
   if (loading) {
     return (
@@ -16,11 +17,24 @@ export function RestApisStandalone() {
   }
 
   if (error) {
+    const isPermissionError = error.toLowerCase().includes('permission') || 
+                              error.toLowerCase().includes('access denied') || 
+                              error.toLowerCase().includes('forbidden') || 
+                              error.includes('403');
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] space-y-4 text-center">
-        <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-500 max-w-md">
-          <p className="font-medium mb-1">Failed to load applications</p>
+        <div className="p-6 bg-red-500/10 border border-red-500/50 rounded-xl text-red-500 max-w-md space-y-3">
+          <p className="font-semibold text-lg">
+            {isPermissionError ? 'Access Restricted' : 'Failed to load applications'}
+          </p>
           <p className="text-sm opacity-80">{error}</p>
+          <Button 
+            variant="outline" 
+            className="mt-2 border-red-500/50 text-red-400 hover:bg-red-500/20" 
+            onClick={() => refreshApplications && refreshApplications()}
+          >
+            Retry Connection
+          </Button>
         </div>
       </div>
     );

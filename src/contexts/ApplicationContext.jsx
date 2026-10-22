@@ -39,13 +39,18 @@ export function ApplicationProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const endpoint = (currentUser.role === 'org_admin' || currentUser.role === 'sys_admin') 
+      const userRole = (currentUser.role || '').toLowerCase().trim().replace(/[-\s]+/g, '_');
+      const endpoint = (userRole === 'org_admin' || userRole === 'sys_admin') 
         ? '/api/org/applications' 
         : '/api/designer/applications';
         
       const res = await orgFetch(endpoint);
       if (!res.ok) {
-        throw new Error('Failed to load applications');
+        const errorData = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          throw new Error(errorData.error || 'Access Denied: Insufficient role permissions to access applications.');
+        }
+        throw new Error(errorData.error || ('Failed to load applications. Status: ' + res.status));
       }
       
       const data = await res.json();
