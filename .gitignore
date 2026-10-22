@@ -37,3 +37,8 @@ server/test_workflow.js
 server/update_app_schema.js
 test_schema.js
 
+# Python & Test Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/

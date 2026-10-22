@@ -40,7 +40,8 @@ async function runMigration() {
       'application_pages',
       'application_navigation',
       'application_entities',
-      'designer_applications'
+      'designer_applications',
+      'password_reset_tokens'
     ];
 
     for (const table of requiredTables) {

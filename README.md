@@ -212,21 +212,5 @@ If PostgreSQL connectivity fails, the endpoint returns `HTTP 503 Service Unavail
 
 ## 9. Verification & Testing
 
-Entera includes a comprehensive automated end-to-end regression test suite verifying all 17 production requirements:
+Entera's test suite is being refreshed with targeted test cases.
 
-```bash
-# Run comprehensive production readiness test (103 checks)
-node test_production_readiness_e2e.cjs
-
-# Run preview & runtime workflow test
-node test_preview_and_runtime_workflow.cjs
-
-# Run publishing & deployment test
-node test_publish_and_deployment_workflow.cjs
-
-# Run system administrator test
-node test_sysadmin_e2e.cjs
-
-# Run organization administrator test
-node test_org_admin_e2e.cjs
-```
