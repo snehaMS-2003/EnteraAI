@@ -295,9 +295,11 @@ export function OrgUsers() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-white/10 text-xs font-semibold text-gray-500 tracking-wider">
-                  <th className="px-5 py-4">USER</th>
+                  <th className="px-5 py-4">NAME</th>
+                  <th className="px-5 py-4">USERNAME</th>
+                  <th className="px-5 py-4 hidden md:table-cell">EMAIL</th>
                   <th className="px-5 py-4 hidden md:table-cell">ROLE</th>
-                  <th className="px-5 py-4 hidden lg:table-cell">APPLICATIONS</th>
+                  <th className="px-5 py-4 hidden lg:table-cell">ASSIGNED APPLICATIONS</th>
                   <th className="px-5 py-4">STATUS</th>
                   <th className="px-5 py-4 hidden xl:table-cell">LAST ACTIVE</th>
                   <th className="px-5 py-4 text-right">ACTIONS</th>
@@ -318,23 +320,36 @@ export function OrgUsers() {
                           </div>
                           <div>
                             <p className="font-medium text-white">{d.name}</p>
-                            <p className="text-xs text-gray-500">{d.email}</p>
                           </div>
                         </div>
                       </td>
+                      <td className="px-5 py-4">
+                        <span className="font-mono text-xs text-primary-400 font-medium bg-primary-500/10 px-2 py-1 rounded border border-primary-500/20">
+                          @{d.username || d.name.toLowerCase().replace(/\s+/g, '')}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 hidden md:table-cell text-sm text-gray-400">
+                        {d.email}
+                      </td>
                       <td className="px-5 py-4 hidden md:table-cell text-sm text-gray-300 capitalize">
-                        {d.role.replace('_', ' ')}
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300">
+                          {d.role.replace('_', ' ')}
+                        </span>
                       </td>
                       <td className="px-5 py-4 hidden lg:table-cell">
                         <div className="flex flex-wrap gap-1">
-                          {d.assigned_applications?.length > 0 ? (
+                          {d.role === 'org_admin' ? (
+                            <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md text-xs font-medium">
+                              All Applications
+                            </span>
+                          ) : d.assigned_applications?.length > 0 ? (
                             d.assigned_applications.slice(0,2).map(a => (
                               <span key={a.id} className="px-2 py-0.5 bg-white/10 rounded-md text-xs text-gray-300 truncate max-w-[120px]">
                                 {a.name}
                               </span>
                             ))
-                          ) : <span className="text-xs text-gray-500">—</span>}
-                          {d.assigned_applications?.length > 2 && (
+                          ) : <span className="text-xs text-amber-400/80 italic">None Assigned</span>}
+                          {d.role !== 'org_admin' && d.assigned_applications?.length > 2 && (
                             <span className="px-2 py-0.5 bg-white/5 rounded-md text-xs text-gray-400">
                               +{d.assigned_applications.length - 2}
                             </span>
@@ -428,10 +443,11 @@ export function OrgUsers() {
 function DesignerModal({ designer, applications, onClose, onSuccess }) {
   const [form, setForm] = useState({
     name: designer?.name || '',
+    username: designer?.username || '',
     email: designer?.email || '',
     password: '',
     role: designer?.role || 'user',
-    status: designer?.status || 'pending',
+    status: designer?.status || 'active',
     applications: designer?.assigned_applications?.map(a => a.id) || []
   });
   const [loading, setLoading] = useState(false);
@@ -448,6 +464,21 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
+    if (!form.name.trim()) {
+      setError('Name is required.');
+      return;
+    }
+    if (!form.username.trim()) {
+      setError('Username is required.');
+      return;
+    }
+    if (form.role === 'user' && (!form.applications || form.applications.length === 0)) {
+      setError('Application assignment is required for normal User accounts.');
+      return;
+    }
+
     setLoading(true);
     try {
       const url = designer ? `/api/org/users/${designer.id}` : '/api/org/users';
@@ -455,10 +486,14 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
       
       const res = await orgFetch(url, {
         method,
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...form,
+          name: form.name.trim(),
+          username: form.username.trim()
+        })
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to save user');
       }
       onSuccess();
@@ -483,17 +518,21 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Name</label>
-            <Input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Jane Doe" />
+            <Input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Tom" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-1">Username</label>
+            <Input required value={form.username} onChange={e => setForm({...form, username: e.target.value})} placeholder="tom123" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Email</label>
-            <Input required type="email" value={form.email} disabled={!!designer} onChange={e => setForm({...form, email: e.target.value})} placeholder="jane@example.com" />
+            <Input required type="email" value={form.email} disabled={!!designer} onChange={e => setForm({...form, email: e.target.value})} placeholder="tom123@gmail.com" />
           </div>
           {!designer && (
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1">Password</label>
               <Input required type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="••••••••" />
-              <p className="text-xs text-primary-400 mt-1">User will be created as active and can log in immediately with these credentials.</p>
+              <p className="text-xs text-primary-400 mt-1">User will be created as active and can log in immediately with their username & password.</p>
             </div>
           )}
           <div className="grid grid-cols-2 gap-4">
@@ -519,19 +558,40 @@ function DesignerModal({ designer, applications, onClose, onSuccess }) {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">Assign Applications</label>
-            <div className="border border-white/10 rounded-xl max-h-48 overflow-y-auto bg-white/5 divide-y divide-white/5">
-              {applications.length === 0 ? (
-                <div className="p-4 text-sm text-gray-500">No applications available in organization.</div>
-              ) : (
-                applications.map(app => (
-                  <label key={app.id} className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer">
-                    <input type="checkbox" checked={form.applications.includes(app.id)} onChange={() => toggleApp(app.id)} className="rounded border-gray-600 text-primary-500 focus:ring-primary-500 bg-white/5" />
-                    <span className="text-sm text-white">{app.app_name}</span>
-                  </label>
-                ))
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-400">
+                Assign Applications {form.role === 'user' && <span className="text-amber-400 text-xs font-semibold">(Required for User)</span>}
+              </label>
+              {form.role === 'org_admin' && (
+                <span className="text-xs text-purple-400 font-medium">Org-wide access granted</span>
               )}
             </div>
+            {form.role === 'org_admin' ? (
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs text-purple-300">
+                Organization Administrators automatically have access to all applications in the organization.
+              </div>
+            ) : (
+              <div className="border border-white/10 rounded-xl max-h-48 overflow-y-auto bg-white/5 divide-y divide-white/5">
+                {applications.length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">No applications available in organization.</div>
+                ) : (
+                  applications.map(app => (
+                    <label key={app.id} className="flex items-center gap-3 p-3 hover:bg-white/5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={form.applications.includes(app.id)} 
+                        onChange={() => toggleApp(app.id)} 
+                        className="rounded border-gray-600 text-primary-500 focus:ring-primary-500 bg-white/5" 
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-white block">{app.app_name}</span>
+                        <span className="text-xs text-gray-400">{app.industry || 'General'}</span>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+            )}
           </div>
           
           <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
@@ -558,7 +618,8 @@ function ViewDesignerModal({ designer, onClose }) {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-white">{designer.name}</h2>
-                  <p className="text-gray-400">{designer.email}</p>
+                  <p className="font-mono text-xs text-primary-400 mt-0.5">@{designer.username || designer.name.toLowerCase().replace(/\s+/g, '')}</p>
+                  <p className="text-xs text-gray-400">{designer.email}</p>
                 </div>
              </div>
              <button type="button" onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-lg"><X className="h-5 w-5" /></button>
@@ -566,6 +627,14 @@ function ViewDesignerModal({ designer, onClose }) {
         </div>
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Username</p>
+              <p className="text-sm font-mono text-primary-400">@{designer.username || designer.name.toLowerCase().replace(/\s+/g, '')}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Email</p>
+              <p className="text-sm text-white truncate">{designer.email}</p>
+            </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">Role</p>
               <p className="text-sm text-white capitalize">{designer.role.replace('_', ' ')}</p>
@@ -585,16 +654,20 @@ function ViewDesignerModal({ designer, onClose }) {
           </div>
           
           <div>
-            <p className="text-xs text-gray-500 mb-2">Assigned Applications ({designer.assigned_applications?.length || 0})</p>
+            <p className="text-xs text-gray-500 mb-2">Assigned Applications ({designer.role === 'org_admin' ? 'All' : (designer.assigned_applications?.length || 0)})</p>
             <div className="flex flex-wrap gap-2">
-              {designer.assigned_applications?.length > 0 ? (
+              {designer.role === 'org_admin' ? (
+                <span className="px-3 py-1 bg-purple-500/10 border border-purple-500/20 rounded-lg text-sm text-purple-300 font-medium">
+                  All Organization Applications
+                </span>
+              ) : designer.assigned_applications?.length > 0 ? (
                 designer.assigned_applications.map(a => (
                   <span key={a.id} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-300">
                     {a.name}
                   </span>
                 ))
               ) : (
-                <p className="text-sm text-gray-500 italic">No applications assigned.</p>
+                <p className="text-sm text-amber-400/80 italic">No applications assigned.</p>
               )}
             </div>
           </div>

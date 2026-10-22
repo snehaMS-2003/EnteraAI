@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Power, PowerOff, AlertCircle, Search, Filter } from 'lucide-react';
+import { Building2, Power, PowerOff, AlertCircle, Search, Filter, Trash2 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -71,6 +71,34 @@ export function SysAdminOrganizations() {
       setActionMsg({
         type: 'error',
         text: `Unable to ${action} organization: ${err.message}`
+      });
+    }
+  };
+
+  const handleDeleteOrg = async (id, orgName) => {
+    if (!window.confirm(`Are you sure you want to permanently delete organization "${orgName || 'this organization'}"? This action cannot be undone.`)) {
+      return;
+    }
+    setActionMsg({ type: '', text: '' });
+    try {
+      const response = await orgFetch(`/api/organizations/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || 'Unable to delete organization');
+      }
+      
+      setOrganizations(orgs => orgs.filter(org => org.id !== id));
+      setActionMsg({
+        type: 'success',
+        text: `Organization "${orgName}" deleted successfully.`
+      });
+    } catch (err) {
+      setActionMsg({
+        type: 'error',
+        text: `Unable to delete organization: ${err.message}`
       });
     }
   };
@@ -191,6 +219,14 @@ export function SysAdminOrganizations() {
                       >
                         {org.status === 'active' ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
                         {org.status === 'active' ? 'Deactivate' : 'Activate'}
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => handleDeleteOrg(org.id, org.name)}
+                        className="flex items-center gap-2 text-red-400 border-red-500/20 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/40"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
                       </Button>
                     </div>
                   </div>
