@@ -13,26 +13,48 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Production CORS Configuration
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : (process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
-      : [
-          'http://localhost:5173',
-          'http://localhost:4173',
-          'http://localhost:3000',
-          'http://localhost:5000',
-          'http://127.0.0.1:5173',
-          'http://127.0.0.1:4173',
-          'http://127.0.0.1:3000',
-          'http://127.0.0.1:5000'
-        ]);
+const getAllowedOrigins = () => {
+  const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  return [
+    'https://enteraai.vercel.app',
+    'https://entera-app.vercel.app',
+    'https://entera-ai-nine.vercel.app',
+    ...envOrigins,
+    'http://localhost:5173',
+    'http://localhost:4173',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:4173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5000'
+  ];
+};
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow non-browser requests (e.g. server-to-server, curl, tests, mobile apps)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin))) {
+    
+    let isAllowed = false;
+    try {
+      const parsed = new URL(origin);
+      if (
+        getAllowedOrigins().includes(origin) ||
+        getAllowedOrigins().includes(origin.replace(/\/$/, '')) ||
+        parsed.hostname.endsWith('.vercel.app') ||
+        (process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin))
+      ) {
+        isAllowed = true;
+      }
+    } catch {
+      isAllowed = false;
+    }
+
+    if (isAllowed) {
       return callback(null, true);
     }
     return callback(new Error(`Origin ${origin} not allowed by CORS`));
@@ -41,6 +63,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Org-Id', 'X-User-Id', 'X-User-Email', 'X-User-Role', 'X-App-Id', 'X-Application-Id', 'Accept']
 }));
+
 
 app.use(express.json());
 
@@ -5102,6 +5125,16 @@ if (hasDist) {
     next();
   });
 }
+
+// Global JSON error handler ensures all errors return JSON instead of HTML
+app.use((err, req, res, next) => {
+  console.error('[UNHANDLED SERVER ERROR]:', err.message || err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = err.status || (err.message && err.message.includes('CORS') ? 403 : 500);
+  res.status(status).json({ error: err.message || 'Internal server error' });
+});
 
 app.listen(PORT, () => {
   const envMode = process.env.NODE_ENV || 'production';
