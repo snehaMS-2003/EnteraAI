@@ -19,7 +19,7 @@ The complete Entera.ai platform has been successfully migrated from local develo
                                                   ▼
                       ┌────────────────────────────────────────────────────────┐
                       │              VERCEL (Frontend Production)              │
-                      │            https://entera-ai-nine.vercel.app           │
+                      │               https://enteraai.vercel.app              │
                       │                                                        │
                       │  - Framework: React 19 + Vite 8 SPA                    │
                       │  - Routing: Seamless SPA rewriting (/(.*) -> index)   │
@@ -56,7 +56,8 @@ The complete Entera.ai platform has been successfully migrated from local develo
 
 | Component | Provider | Production URL | Status | Health Verification |
 | :--- | :--- | :--- | :---: | :--- |
-| **Frontend Web App** | **Vercel** | [https://entera-ai-nine.vercel.app](https://entera-ai-nine.vercel.app) | **READY** | HTTP 200 (SPA Shell) |
+| **Frontend Web App** | **Vercel** | [https://enteraai.vercel.app](https://enteraai.vercel.app) | **READY** | HTTP 200 (SPA Shell) |
+| **Frontend Alternative** | **Vercel** | [https://entera-app.vercel.app](https://entera-app.vercel.app) | **READY** | HTTP 200 (Alias) |
 | **Backend REST API** | **Render** | [https://entera-backend.onrender.com](https://entera-backend.onrender.com) | **LIVE** | HTTP 200 (`/health` UP) |
 | **Managed Database** | **Supabase** | `db.viykrdlmvhgwgmtzpzhb.supabase.co` | **HEALTHY** | Connected via SSL |
 
