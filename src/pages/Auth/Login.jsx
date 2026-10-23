@@ -109,9 +109,17 @@ export function Login() {
         body: JSON.stringify({ username: username.trim(), email: username.trim(), password }),
       });
 
-      const data = await response.json();
+      let data = {};
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch {
+          data = {};
+        }
+      }
 
-      if (response.ok) {
+      if (response.ok && data.user) {
         data.user.organizationId = data.user.organizationId || data.user.organization_id;
         localStorage.setItem('user', JSON.stringify(data.user));
         if (login) {
