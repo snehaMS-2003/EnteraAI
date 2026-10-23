@@ -42,3 +42,18 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+
+# Local Database Backups
+backups/
+*.dump
+*.backup
+*.sql
+
+# Scratch & CLI Local Configs
+scratch/
+.vercel/
+supabase/
+
+
+.vercel
+.env*
