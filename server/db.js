@@ -379,9 +379,30 @@ const initDB = async () => {
         phone VARCHAR(50),
         course VARCHAR(255),
         status VARCHAR(50) DEFAULT 'Active',
+        admission_number VARCHAR(50),
+        gender VARCHAR(20),
+        dob DATE,
+        class_grade VARCHAR(50),
+        section VARCHAR(20),
+        roll_number VARCHAR(50),
+        address TEXT,
+        parent_name VARCHAR(255),
+        parent_phone VARCHAR(50),
+        admission_date DATE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS admission_number VARCHAR(50);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS dob DATE;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS class_grade VARCHAR(50);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS section VARCHAR(20);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS roll_number VARCHAR(50);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_name VARCHAR(255);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_phone VARCHAR(50);
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS admission_date DATE;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_students_app_adm_no ON students (application_id, admission_number) WHERE admission_number IS NOT NULL;
     `);
 
     // Generic Application Entities Table (Dynamic Runtime Entities)

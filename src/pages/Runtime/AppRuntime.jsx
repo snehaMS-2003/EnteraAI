@@ -20,10 +20,12 @@ import {
   Home,
   CheckCircle2,
   Users,
-  LayoutDashboard
+  LayoutDashboard,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuth, orgFetch } from '../../hooks/useAuth';
+import { StudentRecordsExcel } from '../../components/runtime/StudentRecordsExcel';
 
 export function AppRuntime({ 
   previewMode: propPreviewMode, 
@@ -432,11 +434,15 @@ export function AppRuntime({
                       {p.slug.includes('dashboard') ? (
                         <LayoutDashboard className="h-4 w-4 shrink-0" />
                       ) : p.slug.includes('student') || p.slug.includes('user') ? (
-                        <Users className="h-4 w-4 shrink-0" />
+                        <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-400" />
                       ) : (
                         <FileText className="h-4 w-4 shrink-0" />
                       )}
-                      <span className="truncate">{p.name}</span>
+                      <span className="truncate">
+                        {p.slug.includes('student') && (p.name === 'Student List' || p.name === 'Students')
+                          ? 'Student Records'
+                          : p.name}
+                      </span>
                     </div>
                     {isActive && <ChevronRight className="h-3.5 w-3.5 text-primary-400 shrink-0" />}
                   </button>
@@ -483,154 +489,37 @@ export function AppRuntime({
               </div>
             ) : (
               <>
-                {/* Active Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-5 border-b border-white/10 gap-4">
-                  <div>
-                    <h1 className="text-2xl font-bold text-white tracking-tight">
-                      {activePage.title || activePage.name}
-                    </h1>
-                    {activePage.description && (
-                      <p className="text-sm text-gray-400 mt-1">{activePage.description}</p>
+                {/* Check if student management page */}
+                {(activePage.slug.includes('student') || activePage.name.toLowerCase().includes('student')) ? (
+                  <StudentRecordsExcel
+                    appId={appData.application.id}
+                    onRecordChange={fetchTableRecords}
+                  />
+                ) : (
+                  <>
+                    {/* Active Page Header for other modules */}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-5 border-b border-white/10 gap-4">
+                      <div>
+                        <h1 className="text-2xl font-bold text-white tracking-tight">
+                          {activePage.title || activePage.name}
+                        </h1>
+                        {activePage.description && (
+                          <p className="text-sm text-gray-400 mt-1">{activePage.description}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Render any configured components on non-student pages (like Dashboard) */}
+                    {activePage.components && activePage.components.length > 0 && (
+                      <div className="grid grid-cols-12 gap-5 pt-4">
+                        {activePage.components.map((comp) => (
+                          <div key={comp.id} className="col-span-12">
+                            {renderRuntimeComponent(comp, tableData, () => setShowAddModal(true))}
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  </div>
-
-                  {/* Actions for database-driven pages */}
-                  {(activePage.slug.includes('student') || activePage.name.toLowerCase().includes('student')) && (
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          setFormData({ name: '', email: '', phone: '', course: 'Computer Science', status: 'Active' });
-                          setShowAddModal(true);
-                        }}
-                        className="gap-2 shadow-lg"
-                      >
-                        <Plus className="h-4 w-4" /> Add Student
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Database-Driven Table Section (Students Table) */}
-                {(activePage.slug.includes('student') || activePage.name.toLowerCase().includes('student')) && (
-                  <div className="bg-dark-200/60 border border-white/10 rounded-2xl p-6 shadow-xl space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <Database className="h-5 w-5 text-primary-400" />
-                        <h2 className="text-base font-bold text-white">Students Directory (PostgreSQL)</h2>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-300 font-mono">
-                          {filteredData.length} records
-                        </span>
-                      </div>
-
-                      {/* Search Bar */}
-                      <div className="relative w-full sm:w-64">
-                        <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search students..."
-                          className="w-full h-9 pl-9 pr-3 rounded-lg border border-white/15 bg-dark-100 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 transition-colors"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Table View */}
-                    <div className="overflow-x-auto rounded-xl border border-white/10">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead className="bg-white/5 border-b border-white/10">
-                          <tr>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px]">ID</th>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px]">Name</th>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px]">Email</th>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px]">Phone</th>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px]">Course</th>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px]">Status</th>
-                            <th className="p-3.5 font-semibold text-gray-300 uppercase tracking-wider text-[11px] text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {tableLoading ? (
-                            <tr>
-                              <td colSpan={7} className="py-10 text-center text-gray-400">
-                                <div className="h-6 w-6 rounded-full border-2 border-primary-500 border-t-transparent animate-spin mx-auto mb-2" />
-                                <span>Loading records from PostgreSQL database...</span>
-                              </td>
-                            </tr>
-                          ) : filteredData.length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="py-12 text-center text-gray-400">
-                                <Users className="h-8 w-8 text-gray-500 mx-auto mb-2" />
-                                <p className="font-medium text-gray-300">No student records found</p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  Click &ldquo;Add Student&rdquo; to insert a real record into PostgreSQL.
-                                </p>
-                              </td>
-                            </tr>
-                          ) : (
-                            filteredData.map((item) => (
-                              <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                                <td className="p-3.5 font-mono text-gray-400">{item.id}</td>
-                                <td className="p-3.5 font-semibold text-white">{item.name}</td>
-                                <td className="p-3.5 text-gray-300">{item.email || '—'}</td>
-                                <td className="p-3.5 font-mono text-gray-300">{item.phone || '—'}</td>
-                                <td className="p-3.5 text-primary-300 font-medium">{item.course || '—'}</td>
-                                <td className="p-3.5">
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${
-                                    item.status?.toLowerCase() === 'active'
-                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                      : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
-                                  }`}>
-                                    {item.status || 'Active'}
-                                  </span>
-                                </td>
-                                <td className="p-3.5 text-right space-x-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setCurrentEditRecord(item);
-                                      setFormData({
-                                        name: item.name || '',
-                                        email: item.email || '',
-                                        phone: item.phone || '',
-                                        course: item.course || 'Computer Science',
-                                        status: item.status || 'Active'
-                                      });
-                                      setShowEditModal(true);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
-                                    title="Edit student"
-                                  >
-                                    <Edit3 className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteRecord(item.id, item.name)}
-                                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
-                                    title="Delete student"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Render any configured components on page */}
-                {activePage.components && activePage.components.length > 0 && (
-                  <div className="grid grid-cols-12 gap-5 pt-4">
-                    {activePage.components.map((comp) => (
-                      <div key={comp.id} className="col-span-12">
-                        {renderRuntimeComponent(comp, tableData, () => setShowAddModal(true))}
-                      </div>
-                    ))}
-                  </div>
+                  </>
                 )}
               </>
             )}

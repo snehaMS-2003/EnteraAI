@@ -4719,10 +4719,19 @@ app.get('/api/runtime/:appId/data/:entity', resolveRuntimeAuth, async (req, res)
     }
 
     if (entity === 'students') {
-      const result = await pool.query(
-        'SELECT id, name, email, phone, course, status, created_at, updated_at FROM students WHERE application_id = $1 ORDER BY id DESC',
-        [appId]
-      );
+      const result = await pool.query(`
+        SELECT 
+          id, application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, 
+          TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+          COALESCE(class_grade, course) AS class_grade,
+          section, roll_number, address, parent_name, parent_phone,
+          TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+          created_at, updated_at
+        FROM students 
+        WHERE application_id = $1 
+        ORDER BY id DESC
+      `, [appId]);
       return res.json(result.rows);
     }
 
@@ -4763,10 +4772,18 @@ app.get('/api/runtime/:appId/data/:entity/:recordId', resolveRuntimeAuth, async 
     }
 
     if (entity === 'students') {
-      const result = await pool.query(
-        'SELECT id, name, email, phone, course, status, created_at, updated_at FROM students WHERE id = $1 AND application_id = $2',
-        [recordId, appId]
-      );
+      const result = await pool.query(`
+        SELECT 
+          id, application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, 
+          TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+          COALESCE(class_grade, course) AS class_grade,
+          section, roll_number, address, parent_name, parent_phone,
+          TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+          created_at, updated_at
+        FROM students 
+        WHERE id = $1 AND application_id = $2
+      `, [recordId, appId]);
       if (result.rows.length === 0) return res.status(404).json({ error: 'Student record not found' });
       return res.json(result.rows[0]);
     }
@@ -4808,16 +4825,59 @@ app.post('/api/runtime/:appId/data/:entity', resolveRuntimeAuth, async (req, res
 
     const payload = req.body;
     if (entity === 'students') {
-      const { name, email, phone, course, status } = payload;
-      if (!name || !name.trim()) {
-        return res.status(400).json({ error: 'Student name is required' });
+      const { errors, data } = normalizeStudentPayload(payload);
+      if (errors.length > 0) {
+        return res.status(400).json({ error: errors.join(', ') });
+      }
+
+      if (!data.admission_number) {
+        const seqRes = await pool.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM students');
+        const nextId = seqRes.rows[0]?.next_id || Math.floor(1000 + Math.random() * 9000);
+        data.admission_number = `ADM-${String(nextId).padStart(4, '0')}`;
+      } else {
+        const dupCheck = await pool.query(
+          'SELECT id FROM students WHERE application_id = $1 AND LOWER(admission_number) = LOWER($2)',
+          [appId, data.admission_number]
+        );
+        if (dupCheck.rows.length > 0) {
+          return res.status(400).json({ error: `Admission number "${data.admission_number}" already exists in this application` });
+        }
       }
 
       const insertRes = await pool.query(`
-        INSERT INTO students (application_id, organization_id, name, email, phone, course, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING *
-      `, [appId, app.organization_id, name.trim(), email || null, phone || null, course || null, status || 'Active']);
+        INSERT INTO students (
+          application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, dob, class_grade, section, roll_number,
+          address, parent_name, parent_phone, admission_date
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        RETURNING 
+          id, application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, 
+          TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+          COALESCE(class_grade, course) AS class_grade,
+          section, roll_number, address, parent_name, parent_phone,
+          TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+          created_at, updated_at
+      `, [
+        appId,
+        app.organization_id,
+        data.name,
+        data.email,
+        data.phone,
+        data.course,
+        data.status,
+        data.admission_number,
+        data.gender,
+        data.dob,
+        data.class_grade,
+        data.section,
+        data.roll_number,
+        data.address,
+        data.parent_name,
+        data.parent_phone,
+        data.admission_date
+      ]);
 
       const student = insertRes.rows[0];
 
@@ -4873,28 +4933,66 @@ app.put('/api/runtime/:appId/data/:entity/:recordId', resolveRuntimeAuth, async 
       if (existing.rows.length === 0) return res.status(404).json({ error: 'Student record not found' });
 
       const current = existing.rows[0];
-      const updated = {
-        name: payload.name !== undefined ? payload.name.trim() : current.name,
-        email: payload.email !== undefined ? payload.email : current.email,
-        phone: payload.phone !== undefined ? payload.phone : current.phone,
-        course: payload.course !== undefined ? payload.course : current.course,
-        status: payload.status !== undefined ? payload.status : current.status
-      };
+      const { errors, data } = normalizeStudentPayload(payload, current);
+      if (errors.length > 0) {
+        return res.status(400).json({ error: errors.join(', ') });
+      }
+
+      if (data.admission_number && data.admission_number !== current.admission_number) {
+        const dupCheck = await pool.query(
+          'SELECT id FROM students WHERE application_id = $1 AND LOWER(admission_number) = LOWER($2) AND id != $3',
+          [appId, data.admission_number, recordId]
+        );
+        if (dupCheck.rows.length > 0) {
+          return res.status(400).json({ error: `Admission number "${data.admission_number}" is already used by another student` });
+        }
+      }
 
       const updateRes = await pool.query(`
         UPDATE students 
-        SET name = $1, email = $2, phone = $3, course = $4, status = $5, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $6 AND application_id = $7
-        RETURNING *
-      `, [updated.name, updated.email, updated.phone, updated.course, updated.status, recordId, appId]);
+        SET 
+          name = $1, email = $2, phone = $3, course = $4, status = $5,
+          admission_number = $6, gender = $7, dob = $8, class_grade = $9,
+          section = $10, roll_number = $11, address = $12, parent_name = $13,
+          parent_phone = $14, admission_date = $15, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $16 AND application_id = $17
+        RETURNING 
+          id, application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, 
+          TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+          COALESCE(class_grade, course) AS class_grade,
+          section, roll_number, address, parent_name, parent_phone,
+          TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+          created_at, updated_at
+      `, [
+        data.name,
+        data.email,
+        data.phone,
+        data.course,
+        data.status,
+        data.admission_number,
+        data.gender,
+        data.dob,
+        data.class_grade,
+        data.section,
+        data.roll_number,
+        data.address,
+        data.parent_name,
+        data.parent_phone,
+        data.admission_date,
+        recordId,
+        appId
+      ]);
+
+      const updated = updateRes.rows[0];
 
       await pool.query(`
         UPDATE application_entities
         SET data = $1, updated_at = CURRENT_TIMESTAMP
         WHERE id = $2 AND application_id = $3
-      `, [JSON.stringify(updateRes.rows[0]), recordId, appId]);
+      `, [JSON.stringify(updated), recordId, appId]);
 
-      return res.json(updateRes.rows[0]);
+      return res.json(updated);
     }
 
     const updateEntity = await pool.query(`
@@ -4994,14 +5092,248 @@ async function resolveAppForRestApi(req, res, next) {
   });
 }
 
-// GET /api/students — Direct Configured REST API Read
+// Helper: Validate and normalize student data
+function normalizeStudentPayload(input, existing = null) {
+  const errors = [];
+  const name = input.name !== undefined ? String(input.name || '').trim() : (existing ? existing.name : '');
+  if (!name) {
+    errors.push('Full Name is required');
+  }
+
+  const email = input.email !== undefined ? (input.email ? String(input.email).trim() : null) : (existing ? existing.email : null);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push('Invalid email address format');
+  }
+
+  const phone = input.phone !== undefined ? (input.phone ? String(input.phone).trim() : null) : (existing ? existing.phone : null);
+  if (phone && phone.length > 30) {
+    errors.push('Phone number is too long (maximum 30 characters)');
+  }
+
+  const parent_phone = input.parent_phone !== undefined ? (input.parent_phone ? String(input.parent_phone).trim() : null) : (existing ? existing.parent_phone : null);
+  if (parent_phone && parent_phone.length > 30) {
+    errors.push('Parent phone number is too long (maximum 30 characters)');
+  }
+
+  let status = input.status !== undefined ? String(input.status || 'Active').trim() : (existing ? existing.status : 'Active');
+  if (status.toLowerCase() === 'inactive') {
+    status = 'Inactive';
+  } else {
+    status = 'Active';
+  }
+
+  let gender = input.gender !== undefined ? (input.gender ? String(input.gender).trim() : null) : (existing ? existing.gender : null);
+  if (gender) {
+    const gLower = gender.toLowerCase();
+    if (gLower.startsWith('m')) gender = 'Male';
+    else if (gLower.startsWith('f')) gender = 'Female';
+    else if (gLower.startsWith('o')) gender = 'Other';
+  }
+
+  const class_grade = input.class_grade !== undefined ? (input.class_grade ? String(input.class_grade).trim() : null) 
+    : (input.course !== undefined ? (input.course ? String(input.course).trim() : null) : (existing ? (existing.class_grade || existing.course) : null));
+
+  const section = input.section !== undefined ? (input.section ? String(input.section).trim() : null) : (existing ? existing.section : null);
+  const roll_number = input.roll_number !== undefined ? (input.roll_number ? String(input.roll_number).trim() : null) : (existing ? existing.roll_number : null);
+  const address = input.address !== undefined ? (input.address ? String(input.address).trim() : null) : (existing ? existing.address : null);
+  const parent_name = input.parent_name !== undefined ? (input.parent_name ? String(input.parent_name).trim() : null) : (existing ? existing.parent_name : null);
+
+  // Normalize dates
+  const normalizeDate = (d) => {
+    if (!d) return null;
+    const s = String(d).trim();
+    if (!s) return null;
+    const match = s.match(/^\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+    const parsed = new Date(s);
+    return isNaN(parsed.getTime()) ? null : parsed.toISOString().split('T')[0];
+  };
+
+  const dob = input.dob !== undefined ? normalizeDate(input.dob) : (existing ? normalizeDate(existing.dob) : null);
+  const admission_date = input.admission_date !== undefined ? normalizeDate(input.admission_date) : (existing ? normalizeDate(existing.admission_date) : null);
+
+  let admission_number = input.admission_number !== undefined ? (input.admission_number ? String(input.admission_number).trim() : null) : (existing ? existing.admission_number : null);
+
+  return {
+    errors,
+    data: {
+      name,
+      email,
+      phone,
+      course: class_grade,
+      class_grade,
+      status,
+      admission_number,
+      gender,
+      dob,
+      section,
+      roll_number,
+      address,
+      parent_name,
+      parent_phone,
+      admission_date,
+    }
+  };
+}
+
+// GET /api/students — Direct Configured REST API Read with Search, Filter, Sort, Pagination, and Stats
 app.get('/api/students', resolveAppForRestApi, async (req, res) => {
   try {
     const pool = getDB();
-    const result = await pool.query(
-      'SELECT id, name, email, phone, course, status, created_at, updated_at FROM students WHERE application_id = $1 ORDER BY id DESC',
-      [req.targetApp.id]
-    );
+    const {
+      search,
+      class_grade,
+      section,
+      gender,
+      status,
+      sort_by = 'id',
+      sort_dir = 'desc',
+      page,
+      limit,
+      paginated
+    } = req.query;
+
+    const conditions = ['application_id = $1'];
+    const params = [req.targetApp.id];
+
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`LOWER(status) = LOWER($${params.length})`);
+    }
+
+    if (gender && gender !== 'all') {
+      params.push(gender);
+      conditions.push(`LOWER(gender) = LOWER($${params.length})`);
+    }
+
+    if (class_grade && class_grade !== 'all') {
+      params.push(class_grade);
+      conditions.push(`(LOWER(COALESCE(class_grade, '')) = LOWER($${params.length}) OR LOWER(COALESCE(course, '')) = LOWER($${params.length}))`);
+    }
+
+    if (section && section !== 'all') {
+      params.push(section);
+      conditions.push(`LOWER(COALESCE(section, '')) = LOWER($${params.length})`);
+    }
+
+    if (search && search.trim()) {
+      params.push(`%${search.trim().toLowerCase()}%`);
+      const pIdx = params.length;
+      conditions.push(`(
+        LOWER(name) LIKE $${pIdx} OR 
+        LOWER(COALESCE(admission_number, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(email, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(phone, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(class_grade, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(course, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(section, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(roll_number, '')) LIKE $${pIdx} OR 
+        LOWER(COALESCE(parent_name, '')) LIKE $${pIdx} OR
+        LOWER(COALESCE(parent_phone, '')) LIKE $${pIdx} OR
+        CAST(id AS TEXT) LIKE $${pIdx}
+      )`);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Application-wide metrics
+    const statsRes = await pool.query(`
+      SELECT 
+        COUNT(*) AS total,
+        COUNT(CASE WHEN LOWER(status) = 'active' THEN 1 END) AS active,
+        COUNT(CASE WHEN LOWER(status) = 'inactive' THEN 1 END) AS inactive
+      FROM students 
+      WHERE application_id = $1
+    `, [req.targetApp.id]);
+
+    const totalInApp = parseInt(statsRes.rows[0]?.total || '0', 10);
+    const activeInApp = parseInt(statsRes.rows[0]?.active || '0', 10);
+    const inactiveInApp = parseInt(statsRes.rows[0]?.inactive || '0', 10);
+
+    // Filtered count
+    const countRes = await pool.query(`SELECT COUNT(*) FROM students WHERE ${whereClause}`, params);
+    const totalFiltered = parseInt(countRes.rows[0]?.count || '0', 10);
+
+    // Sorting
+    const allowedSortCols = {
+      id: 'id',
+      admission_number: 'admission_number',
+      name: 'name',
+      gender: 'gender',
+      dob: 'dob',
+      class_grade: 'class_grade',
+      section: 'section',
+      roll_number: 'roll_number',
+      email: 'email',
+      phone: 'phone',
+      parent_name: 'parent_name',
+      parent_phone: 'parent_phone',
+      admission_date: 'admission_date',
+      status: 'status',
+      created_at: 'created_at'
+    };
+    const orderCol = allowedSortCols[sort_by] || 'id';
+    const orderDirection = (sort_dir || '').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    let queryStr = `
+      SELECT 
+        id, application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, 
+        TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+        COALESCE(class_grade, course) AS class_grade,
+        section, roll_number, address, parent_name, parent_phone,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        created_at, updated_at
+      FROM students 
+      WHERE ${whereClause} 
+      ORDER BY ${orderCol} ${orderDirection} NULLS LAST
+    `;
+
+    const isPaginated = paginated === 'true' || (page !== undefined && limit !== undefined);
+
+    res.setHeader('X-Total-Count', totalFiltered);
+    res.setHeader('X-Active-Count', activeInApp);
+    res.setHeader('X-Inactive-Count', inactiveInApp);
+
+    if (isPaginated && limit) {
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.max(1, parseInt(limit, 10) || 25);
+      const offset = (pageNum - 1) * limitNum;
+      params.push(limitNum, offset);
+      queryStr += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+      const result = await pool.query(queryStr, params);
+
+      return res.json({
+        records: result.rows,
+        total: totalFiltered,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalFiltered / limitNum) || 1,
+        stats: {
+          total: totalInApp,
+          active: activeInApp,
+          inactive: inactiveInApp
+        }
+      });
+    }
+
+    const result = await pool.query(queryStr, params);
+
+    if (paginated === 'true') {
+      return res.json({
+        records: result.rows,
+        total: totalFiltered,
+        page: 1,
+        limit: totalFiltered || 1,
+        totalPages: 1,
+        stats: {
+          total: totalInApp,
+          active: activeInApp,
+          inactive: inactiveInApp
+        }
+      });
+    }
+
     res.json(result.rows);
   } catch (error) {
     console.error('GET /api/students error:', error);
@@ -5014,10 +5346,19 @@ app.get('/api/students/:id', resolveAppForRestApi, async (req, res) => {
   try {
     const pool = getDB();
     const studentId = parseInt(req.params.id, 10);
-    const result = await pool.query(
-      'SELECT id, name, email, phone, course, status, created_at, updated_at FROM students WHERE id = $1 AND application_id = $2',
-      [studentId, req.targetApp.id]
-    );
+    const result = await pool.query(`
+      SELECT 
+        id, application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, 
+        TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+        COALESCE(class_grade, course) AS class_grade,
+        section, roll_number, address, parent_name, parent_phone,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        created_at, updated_at
+      FROM students 
+      WHERE id = $1 AND application_id = $2
+    `, [studentId, req.targetApp.id]);
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found in your application' });
     }
@@ -5028,20 +5369,65 @@ app.get('/api/students/:id', resolveAppForRestApi, async (req, res) => {
   }
 });
 
-// POST /api/students — Direct Configured REST API Create
+// POST /api/students — Direct Configured REST API Create Single Student
 app.post('/api/students', resolveAppForRestApi, async (req, res) => {
   try {
     const pool = getDB();
-    const { name, email, phone, course, status } = req.body;
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Student name is required' });
+    const { errors, data } = normalizeStudentPayload(req.body);
+    if (errors.length > 0) {
+      return res.status(400).json({ error: errors.join(', ') });
+    }
+
+    // Auto-generate admission_number if not provided
+    if (!data.admission_number) {
+      const seqRes = await pool.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM students');
+      const nextId = seqRes.rows[0]?.next_id || Math.floor(1000 + Math.random() * 9000);
+      data.admission_number = `ADM-${String(nextId).padStart(4, '0')}`;
+    } else {
+      // Check duplicate admission number in this application
+      const dupCheck = await pool.query(
+        'SELECT id FROM students WHERE application_id = $1 AND LOWER(admission_number) = LOWER($2)',
+        [req.targetApp.id, data.admission_number]
+      );
+      if (dupCheck.rows.length > 0) {
+        return res.status(400).json({ error: `Admission number "${data.admission_number}" already exists in this application` });
+      }
     }
 
     const insertRes = await pool.query(`
-      INSERT INTO students (application_id, organization_id, name, email, phone, course, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *
-    `, [req.targetApp.id, req.targetApp.organization_id, name.trim(), email || null, phone || null, course || null, status || 'Active']);
+      INSERT INTO students (
+        application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, dob, class_grade, section, roll_number,
+        address, parent_name, parent_phone, admission_date
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      RETURNING 
+        id, application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, 
+        TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+        COALESCE(class_grade, course) AS class_grade,
+        section, roll_number, address, parent_name, parent_phone,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        created_at, updated_at
+    `, [
+      req.targetApp.id,
+      req.targetApp.organization_id,
+      data.name,
+      data.email,
+      data.phone,
+      data.course,
+      data.status,
+      data.admission_number,
+      data.gender,
+      data.dob,
+      data.class_grade,
+      data.section,
+      data.roll_number,
+      data.address,
+      data.parent_name,
+      data.parent_phone,
+      data.admission_date
+    ]);
 
     const student = insertRes.rows[0];
 
@@ -5055,11 +5441,161 @@ app.post('/api/students', resolveAppForRestApi, async (req, res) => {
     res.status(201).json(student);
   } catch (error) {
     console.error('POST /api/students error:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Duplicate record: Admission number already exists' });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// PUT /api/students/:id — Direct Configured REST API Update
+// POST /api/students/bulk — Transactional Bulk Import / Batch Create
+app.post('/api/students/bulk', resolveAppForRestApi, async (req, res) => {
+  const pool = getDB();
+  const client = await pool.connect();
+  try {
+    const { students = [], skipInvalid = false } = req.body;
+    if (!Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ error: 'Students list must be a non-empty array' });
+    }
+
+    if (students.length > 1000) {
+      return res.status(400).json({ error: 'Maximum 1,000 records allowed per batch import' });
+    }
+
+    // Existing admission numbers in this application
+    const existingAdmRes = await client.query(
+      'SELECT LOWER(admission_number) AS adm FROM students WHERE application_id = $1 AND admission_number IS NOT NULL',
+      [req.targetApp.id]
+    );
+    const existingAdmSet = new Set(existingAdmRes.rows.map(r => r.adm));
+
+    // Validate rows
+    const seenPayloadAdm = new Set();
+    const validatedRows = [];
+    const validationErrors = [];
+
+    students.forEach((row, idx) => {
+      const rowNum = idx + 1;
+      const { errors, data } = normalizeStudentPayload(row);
+      const rowErrors = [...errors];
+
+      if (data.admission_number) {
+        const lowerAdm = data.admission_number.toLowerCase();
+        if (existingAdmSet.has(lowerAdm)) {
+          rowErrors.push(`Admission number "${data.admission_number}" already exists in the database`);
+        } else if (seenPayloadAdm.has(lowerAdm)) {
+          rowErrors.push(`Duplicate admission number "${data.admission_number}" found in uploaded file (row ${rowNum})`);
+        } else {
+          seenPayloadAdm.add(lowerAdm);
+        }
+      }
+
+      if (rowErrors.length > 0) {
+        validationErrors.push({ row: rowNum, data: row, errors: rowErrors });
+      } else {
+        validatedRows.push({ rowNum, data });
+      }
+    });
+
+    if (validationErrors.length > 0 && !skipInvalid) {
+      return res.status(400).json({
+        error: 'Validation failed for one or more rows. Review errors or select "Import Valid Rows".',
+        validationErrors,
+        totalSubmitted: students.length,
+        validCount: validatedRows.length,
+        invalidCount: validationErrors.length
+      });
+    }
+
+    if (validatedRows.length === 0) {
+      return res.status(400).json({
+        error: 'No valid rows found to import',
+        validationErrors,
+        totalSubmitted: students.length,
+        validCount: 0,
+        invalidCount: validationErrors.length
+      });
+    }
+
+    // Begin transactional insert
+    await client.query('BEGIN');
+    const insertedRecords = [];
+
+    // Fetch next starting ID for auto-generation if needed
+    const seqRes = await client.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM students');
+    let runningSeq = parseInt(seqRes.rows[0]?.next_id || '1000', 10);
+
+    for (const item of validatedRows) {
+      const d = item.data;
+      if (!d.admission_number) {
+        d.admission_number = `ADM-${String(runningSeq++).padStart(4, '0')}`;
+      }
+
+      const ins = await client.query(`
+        INSERT INTO students (
+          application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, dob, class_grade, section, roll_number,
+          address, parent_name, parent_phone, admission_date
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        RETURNING 
+          id, application_id, organization_id, name, email, phone, course, status,
+          admission_number, gender, 
+          TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+          COALESCE(class_grade, course) AS class_grade,
+          section, roll_number, address, parent_name, parent_phone,
+          TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+          created_at, updated_at
+      `, [
+        req.targetApp.id,
+        req.targetApp.organization_id,
+        d.name,
+        d.email,
+        d.phone,
+        d.course,
+        d.status,
+        d.admission_number,
+        d.gender,
+        d.dob,
+        d.class_grade,
+        d.section,
+        d.roll_number,
+        d.address,
+        d.parent_name,
+        d.parent_phone,
+        d.admission_date
+      ]);
+
+      const created = ins.rows[0];
+      insertedRecords.push(created);
+
+      await client.query(`
+        INSERT INTO application_entities (id, application_id, organization_id, entity_type, data)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
+      `, [created.id, req.targetApp.id, req.targetApp.organization_id, 'students', JSON.stringify(created)]);
+    }
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      success: true,
+      message: `Successfully imported ${insertedRecords.length} student record(s)`,
+      insertedCount: insertedRecords.length,
+      skippedCount: validationErrors.length,
+      errors: validationErrors,
+      records: insertedRecords
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('POST /api/students/bulk error:', error);
+    res.status(500).json({ error: error.message || 'Bulk import transaction failed and was rolled back' });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/students/:id — Direct Configured REST API Update Single Student
 app.put('/api/students/:id', resolveAppForRestApi, async (req, res) => {
   try {
     const pool = getDB();
@@ -5070,51 +5606,93 @@ app.put('/api/students/:id', resolveAppForRestApi, async (req, res) => {
     }
 
     const current = existing.rows[0];
-    const { name, email, phone, course, status } = req.body;
-    const updated = {
-      name: name !== undefined ? name.trim() : current.name,
-      email: email !== undefined ? email : current.email,
-      phone: phone !== undefined ? phone : current.phone,
-      course: course !== undefined ? course : current.course,
-      status: status !== undefined ? status : current.status
-    };
+    const { errors, data } = normalizeStudentPayload(req.body, current);
+    if (errors.length > 0) {
+      return res.status(400).json({ error: errors.join(', ') });
+    }
+
+    // Check duplicate admission number if changed
+    if (data.admission_number && data.admission_number !== current.admission_number) {
+      const dupCheck = await pool.query(
+        'SELECT id FROM students WHERE application_id = $1 AND LOWER(admission_number) = LOWER($2) AND id != $3',
+        [req.targetApp.id, data.admission_number, studentId]
+      );
+      if (dupCheck.rows.length > 0) {
+        return res.status(400).json({ error: `Admission number "${data.admission_number}" is already used by another student` });
+      }
+    }
 
     const updateRes = await pool.query(`
       UPDATE students
-      SET name = $1, email = $2, phone = $3, course = $4, status = $5, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $6 AND application_id = $7
-      RETURNING *
-    `, [updated.name, updated.email, updated.phone, updated.course, updated.status, studentId, req.targetApp.id]);
+      SET 
+        name = $1, email = $2, phone = $3, course = $4, status = $5,
+        admission_number = $6, gender = $7, dob = $8, class_grade = $9,
+        section = $10, roll_number = $11, address = $12, parent_name = $13,
+        parent_phone = $14, admission_date = $15, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $16 AND application_id = $17
+      RETURNING 
+        id, application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, 
+        TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+        COALESCE(class_grade, course) AS class_grade,
+        section, roll_number, address, parent_name, parent_phone,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        created_at, updated_at
+    `, [
+      data.name,
+      data.email,
+      data.phone,
+      data.course,
+      data.status,
+      data.admission_number,
+      data.gender,
+      data.dob,
+      data.class_grade,
+      data.section,
+      data.roll_number,
+      data.address,
+      data.parent_name,
+      data.parent_phone,
+      data.admission_date,
+      studentId,
+      req.targetApp.id
+    ]);
+
+    const updated = updateRes.rows[0];
 
     await pool.query(`
       UPDATE application_entities
       SET data = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2 AND application_id = $3
-    `, [JSON.stringify(updateRes.rows[0]), studentId, req.targetApp.id]);
+    `, [JSON.stringify(updated), studentId, req.targetApp.id]);
 
-    res.json(updateRes.rows[0]);
+    res.json(updated);
   } catch (error) {
     console.error('PUT /api/students/:id error:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Duplicate record: Admission number already exists' });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// DELETE /api/students/:id — Direct Configured REST API Delete
+// DELETE /api/students/:id — Direct Configured REST API Delete Single Student
 app.delete('/api/students/:id', resolveAppForRestApi, async (req, res) => {
   try {
     const pool = getDB();
     const studentId = parseInt(req.params.id, 10);
-    const del = await pool.query('DELETE FROM students WHERE id = $1 AND application_id = $2 RETURNING id', [studentId, req.targetApp.id]);
+    const del = await pool.query('DELETE FROM students WHERE id = $1 AND application_id = $2 RETURNING id, name', [studentId, req.targetApp.id]);
     if (del.rows.length === 0) {
       return res.status(404).json({ error: 'Student not found in your application' });
     }
     await pool.query('DELETE FROM application_entities WHERE id = $1 AND application_id = $2', [studentId, req.targetApp.id]);
-    res.json({ success: true, message: 'Student deleted successfully' });
+    res.json({ success: true, message: `Student "${del.rows[0].name}" deleted successfully` });
   } catch (error) {
     console.error('DELETE /api/students/:id error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // Client-side routing fallback for production SPA (when dist exists)
 if (hasDist) {
