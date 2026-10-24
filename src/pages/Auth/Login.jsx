@@ -126,6 +126,8 @@ export function Login() {
 
       if (response.ok && data.user) {
         data.user.organizationId = data.user.organizationId || data.user.organization_id;
+        data.user.organizationCode = data.user.organizationCode || data.user.orgCode || data.user.organization_code;
+        data.user.orgCode = data.user.organizationCode;
         localStorage.setItem('user', JSON.stringify(data.user));
         if (login) {
           login(data.user);

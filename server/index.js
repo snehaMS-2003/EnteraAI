@@ -234,10 +234,12 @@ app.post('/api/auth/reset-rate-limit', (req, res) => {
   res.json({ success: true, message: 'Rate limit counters reset successfully' });
 });
 
-app.post('/api/register', async (req, res) => {
+app.post(['/api/register', '/api/organizations/register'], async (req, res) => {
   try {
     const {
       name,
+      orgCode,
+      organizationCode,
       email,
       adminName,
       fullName,
@@ -280,7 +282,22 @@ app.post('/api/register', async (req, res) => {
     }
     const normalizedEmail = trimmedEmail.toLowerCase();
 
-    // 4. Validate Password Requirements (do not silently trim or modify)
+    // 4. Validate Organization Code
+    let rawOrgCode = (typeof orgCode === 'string' && orgCode.trim())
+      ? orgCode.trim().toUpperCase()
+      : ((typeof organizationCode === 'string' && organizationCode.trim()) ? organizationCode.trim().toUpperCase() : '');
+
+    if (!rawOrgCode) {
+      const sanitizedCandidate = trimmedOrgName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
+      rawOrgCode = sanitizedCandidate.length >= 2 ? sanitizedCandidate : 'ORG';
+    }
+
+    const cleanOrgCode = rawOrgCode.replace(/[^A-Z0-9_-]/g, '');
+    if (cleanOrgCode.length < 2 || cleanOrgCode.length > 30) {
+      return res.status(400).json({ error: 'Organization code must be between 2 and 30 characters (letters, numbers, hyphens).' });
+    }
+
+    // 5. Validate Password Requirements (do not silently trim or modify)
     if (!password || typeof password !== 'string' || password.length === 0) {
       return res.status(400).json({ error: 'Password is required' });
     }
@@ -294,12 +311,12 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must meet all the required security rules.' });
     }
 
-    // 5. Validate Confirm Password if provided
+    // 6. Validate Confirm Password if provided
     if (confirmPassword !== undefined && confirmPassword !== password) {
       return res.status(400).json({ error: 'Passwords do not match.' });
     }
 
-    // 6. Validate Optional/Additional fields if present
+    // 7. Validate Optional/Additional fields if present
     const trimmedPhone = typeof phone === 'string' ? phone.trim() : '';
     if (trimmedPhone && (trimmedPhone.replace(/[\s\-\(\)\+]/g, '').length < 7 || trimmedPhone.length > 25)) {
       return res.status(400).json({ error: 'Please enter a valid phone number.' });
@@ -316,6 +333,16 @@ app.post('/api/register', async (req, res) => {
     const existingOrgName = await pool.query('SELECT id FROM organizations WHERE LOWER(name) = LOWER($1)', [trimmedOrgName]);
     if (existingOrgName.rows.length > 0) {
       return res.status(400).json({ error: 'An organization with this name already exists' });
+    }
+
+    // Check if organization code already exists (case-insensitive)
+    let finalOrgCode = cleanOrgCode;
+    const existingOrgCode = await pool.query('SELECT id FROM organizations WHERE LOWER(org_code) = LOWER($1)', [finalOrgCode]);
+    if (existingOrgCode.rows.length > 0) {
+      if ((orgCode && orgCode.trim()) || (organizationCode && organizationCode.trim())) {
+        return res.status(400).json({ error: 'An organization with this organization code already exists. Please choose a different code.' });
+      }
+      finalOrgCode = `${finalOrgCode}-${Math.floor(100 + Math.random() * 900)}`;
     }
 
     // Check if email already exists in organizations or users (case-insensitive normalized check)
@@ -350,10 +377,10 @@ app.post('/api/register', async (req, res) => {
       const insertOrgQuery = `
         INSERT INTO organizations (
           name, email, admin_name, username, phone, industry, industry_specific,
-          address, city, state, county, district, pincode, website, password_hash
+          address, city, state, county, district, pincode, website, password_hash, org_code, status
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
-        ) RETURNING id
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 'active'
+        ) RETURNING id, org_code
       `;
 
       const orgValues = [
@@ -371,30 +398,32 @@ app.post('/api/register', async (req, res) => {
         district ? String(district).trim() : null,
         pincode ? String(pincode).trim() : null,
         trimmedWebsite || null,
-        passwordHash
+        passwordHash,
+        finalOrgCode
       ];
 
       const orgResult = await client.query(insertOrgQuery, orgValues);
       orgId = orgResult.rows[0].id;
+      finalOrgCode = orgResult.rows[0].org_code;
 
       // Role and Org Security: Administrator account ALWAYS gets 'org_admin' role linked to this orgId.
       // Arbitrary roles or organization IDs from public request are strictly ignored.
       const insertUserQuery = `
         INSERT INTO users (
-          organization_id, name, username, email, password_hash, role
+          organization_id, name, username, email, password_hash, role, status
         ) VALUES (
-          $1, $2, $3, $4, $5, $6
+          $1, $2, $3, $4, $5, 'org_admin', 'active'
         ) RETURNING id
       `;
 
       const userValues = [
-        orgId, trimmedAdminName, trimmedAdminName, normalizedEmail, passwordHash, 'org_admin'
+        orgId, trimmedAdminName, trimmedAdminName, normalizedEmail, passwordHash
       ];
 
       await client.query(insertUserQuery, userValues);
 
       await client.query('COMMIT');
-      console.log(`[SUCCESS] Registered Organization "${trimmedOrgName}" (ID: ${orgId}) with admin email "${normalizedEmail}"`);
+      console.log(`[SUCCESS] Registered Organization "${trimmedOrgName}" (Code: ${finalOrgCode}, ID: ${orgId}) with admin email "${normalizedEmail}"`);
     } catch (txError) {
       await client.query('ROLLBACK');
       throw txError;
@@ -405,12 +434,19 @@ app.post('/api/register', async (req, res) => {
     // Return sanitized response — NEVER return password or passwordHash
     res.status(201).json({
       message: 'Organization registered successfully',
-      id: orgId
+      id: orgId,
+      orgCode: finalOrgCode,
+      organization: {
+        id: orgId,
+        name: trimmedOrgName,
+        org_code: finalOrgCode,
+        email: normalizedEmail
+      }
     });
   } catch (error) {
     console.error('Registration Error Details:', error);
     if (error.code === '23505') {
-      return res.status(400).json({ error: 'An account with this email already exists' });
+      return res.status(409).json({ error: 'An account with this email or organization code already exists' });
     }
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
@@ -426,7 +462,7 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
-    const { username, email, password } = req.body;
+    const { username, email, password, organizationCode, organizationId, orgCode } = req.body;
     const hasUsername = typeof username === 'string';
     const identifier = hasUsername ? username : (typeof email === 'string' ? email : '');
 
@@ -451,11 +487,33 @@ app.post('/api/login', async (req, res) => {
     const pool = getDB();
     const normalizedIdentifier = trimmedIdentifier.toLowerCase();
 
-    // Flexible identifier lookup: match by username, name, or email in users table
+    // 1. Resolve targeted organization if organization identifier is supplied
+    const requestedOrgCode = (organizationCode || orgCode || req.headers['x-org-code'] || '').trim();
+    const requestedOrgId = organizationId || req.headers['x-org-id'];
+    let targetOrg = null;
+
+    if (requestedOrgId && !isNaN(parseInt(requestedOrgId, 10)) && parseInt(requestedOrgId, 10) > 0) {
+      const oCheck = await pool.query('SELECT * FROM organizations WHERE id = $1', [parseInt(requestedOrgId, 10)]);
+      targetOrg = oCheck.rows[0];
+    } else if (requestedOrgCode) {
+      const oCheck = await pool.query(
+        'SELECT * FROM organizations WHERE LOWER(org_code) = LOWER($1) OR LOWER(name) = LOWER($1)',
+        [requestedOrgCode]
+      );
+      targetOrg = oCheck.rows[0];
+    }
+
+    // If organization was explicitly specified by client but does not exist
+    if ((requestedOrgId || requestedOrgCode) && !targetOrg) {
+      recordFailedLogin(req);
+      return res.status(401).json({ error: 'Selected organization was not found or is invalid.' });
+    }
+
+    // 2. Flexible identifier lookup: match by username, name, or email in users table
     const userQuery = await pool.query(
-      `SELECT u.*, o.name as organization_name, o.industry as organization_industry, o.status as organization_status 
-       FROM users u 
-       LEFT JOIN organizations o ON u.organization_id = o.id 
+      `SELECT u.*, o.name as organization_name, o.org_code as organization_code, o.industry as organization_industry, o.status as organization_status
+       FROM users u
+       LEFT JOIN organizations o ON u.organization_id = o.id
        WHERE LOWER(u.username) = LOWER($1) OR LOWER(u.name) = LOWER($1) OR LOWER(u.email) = LOWER($1)`,
       [normalizedIdentifier]
     );
@@ -480,6 +538,7 @@ app.post('/api/login', async (req, res) => {
           role: role,
           status: org.status || 'active',
           organization_name: org.name,
+          organization_code: org.org_code,
           organization_industry: org.industry,
           organization_status: org.status
         };
@@ -495,6 +554,15 @@ app.post('/api/login', async (req, res) => {
     if (!user) {
       recordFailedLogin(req);
       return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    // 3. Organization validation: if user specified an organization, ensure user belongs to it
+    // System Administrator (sys_admin) has platform-wide global access
+    if (targetOrg && user.role !== 'sys_admin') {
+      if (user.organization_id !== targetOrg.id) {
+        recordFailedLogin(req);
+        return res.status(401).json({ error: 'Invalid username or password for the selected organization.' });
+      }
     }
 
     // Check account status
@@ -525,7 +593,7 @@ app.post('/api/login', async (req, res) => {
 
     // Authentication succeeded: clear rate limit counter for this client
     recordSuccessfulLogin(req);
-    console.log(`[SUCCESS] User "${user.username || user.name || user.email}" logged in successfully as "${user.role}"`);
+    console.log(`[SUCCESS] User "${user.username || user.name || user.email}" (Org ID: ${user.organization_id}, Code: ${user.organization_code}) logged in successfully as "${user.role}"`);
 
     // Return sanitized user object — NEVER return password or password_hash
     res.json({
@@ -541,6 +609,8 @@ app.post('/api/login', async (req, res) => {
         organizationId: user.organization_id,
         organization_id: user.organization_id,
         organizationName: user.organization_name,
+        organizationCode: user.organization_code,
+        orgCode: user.organization_code,
         organizationIndustry: user.organization_industry,
         status: user.status
       }
@@ -1749,7 +1819,7 @@ app.get('/api/org/users', requireUserManagementAuth, async (req, res) => {
     if (req.userRole === 'app_admin') {
       const parsedUserId = isNaN(parseInt(req.userId, 10)) ? -1 : parseInt(req.userId, 10);
       query = `
-        SELECT u.id, u.name, COALESCE(u.username, u.name) as username, u.email, u.role, u.status, u.last_active, u.created_at,
+        SELECT u.id, u.organization_id, u.name, COALESCE(u.username, u.name) as username, u.email, u.role, u.status, u.last_active, u.created_at,
           COALESCE(
             json_agg(
               json_build_object('id', a.id, 'name', a.app_name)
@@ -1773,7 +1843,7 @@ app.get('/api/org/users', requireUserManagementAuth, async (req, res) => {
       params = [req.orgId, parsedUserId];
     } else {
       query = `
-        SELECT u.id, u.name, COALESCE(u.username, u.name) as username, u.email, u.role, u.status, u.last_active, u.created_at,
+        SELECT u.id, u.organization_id, u.name, COALESCE(u.username, u.name) as username, u.email, u.role, u.status, u.last_active, u.created_at,
           COALESCE(
             json_agg(
               json_build_object('id', a.id, 'name', a.app_name)
@@ -1804,6 +1874,11 @@ app.post('/api/org/users', requireUserManagementAuth, async (req, res) => {
     if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, and password are required' });
 
     const finalRole = role || 'user';
+
+    // Prevent role escalation: Nobody in org management can create sys_admin
+    if (finalRole === 'sys_admin') {
+      return res.status(403).json({ error: 'Organization administrators cannot assign platform administrator roles.' });
+    }
 
     // Application assignment is strictly required for User role
     if (finalRole === 'user' && (!applications || !Array.isArray(applications) || applications.length === 0)) {
@@ -1861,6 +1936,12 @@ app.post('/api/org/users', requireUserManagementAuth, async (req, res) => {
 app.patch('/api/org/users/:id', requireUserManagementAuth, async (req, res) => {
   try {
     const { name, username, role, status, applications } = req.body;
+
+    // Prevent role escalation to platform administrator immediately
+    if (role === 'sys_admin') {
+      return res.status(403).json({ error: 'Forbidden: Organization administrators cannot assign platform administrator roles.' });
+    }
+
     const pool = getDB();
     const client = await pool.connect();
     
@@ -1872,6 +1953,12 @@ app.patch('/api/org/users/:id', requireUserManagementAuth, async (req, res) => {
       if (userRes.rowCount === 0) throw new Error('User not found');
       
       const existingUser = userRes.rows[0];
+
+      // Prevent self-role modification (prevent lockout/escalation)
+      if (req.userId && parseInt(req.userId, 10) === parseInt(req.params.id, 10) && role && role !== existingUser.role) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Forbidden: You cannot change your own administrative role.' });
+      }
 
       // App Admin cannot modify Organization Administrators
       if (req.userRole === 'app_admin' && (existingUser.role === 'org_admin' || existingUser.role === 'sys_admin')) {
@@ -2550,6 +2637,20 @@ app.delete('/api/sysadmin/users/:id', requireSysAdminAuth, async (req, res) => {
   }
 });
 
+// GET /api/public/organizations — Public list of active organizations for login & student registration
+app.get(['/api/public/organizations', '/api/public-organizations'], async (req, res) => {
+  try {
+    const pool = getDB();
+    const result = await pool.query(
+      "SELECT id, name, org_code, industry FROM organizations WHERE status = 'active' ORDER BY name ASC"
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch public organizations error:', error);
+    res.status(500).json({ error: 'Failed to retrieve organizations' });
+  }
+});
+
 app.get('/api/organizations', async (req, res) => {
   try {
     const role = req.headers['x-user-role'];
@@ -2573,7 +2674,7 @@ app.get('/api/organizations', async (req, res) => {
 
       const result = await pool.query(`
         SELECT 
-          o.id, o.name, o.email, o.admin_name, o.phone, o.industry, o.industry_specific,
+          o.id, o.name, o.org_code, o.email, o.admin_name, o.phone, o.industry, o.industry_specific,
           o.address, o.city, o.state, o.county, o.district, o.pincode, o.website,
           o.created_at, o.status,
           (SELECT COUNT(*) FROM applications a WHERE a.organization_id = o.id) as applications_count,
@@ -2583,7 +2684,7 @@ app.get('/api/organizations', async (req, res) => {
       `);
       return res.json(result.rows);
     } else {
-      const result = await pool.query("SELECT id, name FROM organizations WHERE status = 'active' ORDER BY name ASC");
+      const result = await pool.query("SELECT id, name, org_code, industry FROM organizations WHERE status = 'active' ORDER BY name ASC");
       return res.json(result.rows);
     }
   } catch (error) {
@@ -5846,6 +5947,9 @@ async function requireStudentAuth(req, res, next) {
 app.post('/api/student/register', async (req, res) => {
   try {
     const {
+      organizationCode,
+      organizationId,
+      orgCode,
       fullName,
       name,
       admissionNumber,
@@ -5910,7 +6014,27 @@ app.post('/api/student/register', async (req, res) => {
 
     const pool = getDB();
 
-    // 7. Check if Email Already Taken (Prevent Duplicate Accounts)
+    // 7. Resolve Organization Context
+    const rawOrgCode = (organizationCode || orgCode || req.headers['x-org-code'] || '').trim();
+    const reqOrgId = organizationId || req.headers['x-org-id'];
+    let targetOrg = null;
+
+    if (reqOrgId && !isNaN(parseInt(reqOrgId, 10)) && parseInt(reqOrgId, 10) > 0) {
+      const oRes = await pool.query('SELECT id, name, org_code, status FROM organizations WHERE id = $1', [parseInt(reqOrgId, 10)]);
+      targetOrg = oRes.rows[0];
+    } else if (rawOrgCode) {
+      const oRes = await pool.query(
+        'SELECT id, name, org_code, status FROM organizations WHERE LOWER(org_code) = LOWER($1) OR LOWER(name) = LOWER($1)',
+        [rawOrgCode]
+      );
+      targetOrg = oRes.rows[0];
+    }
+
+    if ((reqOrgId || rawOrgCode) && !targetOrg) {
+      return res.status(400).json({ error: 'The specified school or organization was not found.' });
+    }
+
+    // 8. Check if Email Already Taken (Prevent Duplicate Accounts)
     const existingUserEmail = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [normalizedEmail]);
     if (existingUserEmail.rows.length > 0) {
       return res.status(400).json({ error: 'An account with this email address already exists. Please log in or use forgot password.' });
@@ -5921,15 +6045,42 @@ app.post('/api/student/register', async (req, res) => {
       return res.status(400).json({ error: 'An account with this email address already exists.' });
     }
 
-    // 8. Lookup Existing Student Record in Application 5 (Scope to Student Management App)
-    const studentQuery = await pool.query(
-      `SELECT id, organization_id, application_id, name, admission_number, 
-              TO_CHAR(dob, 'YYYY-MM-DD') AS formatted_dob,
-              class_grade, section, phone, parent_name, parent_phone, user_id, account_status
-       FROM students 
-       WHERE application_id = 5 AND LOWER(admission_number) = LOWER($1)`,
-      [trimmedAdm]
-    );
+    // 9. Lookup Existing Student Record
+    let studentQuery;
+    if (targetOrg) {
+      studentQuery = await pool.query(
+        `SELECT id, organization_id, application_id, name, admission_number,
+                TO_CHAR(dob, 'YYYY-MM-DD') AS formatted_dob,
+                class_grade, section, phone, parent_name, parent_phone, user_id, account_status
+         FROM students
+         WHERE (organization_id = $1 OR organization_id IS NULL) AND LOWER(admission_number) = LOWER($2)`,
+        [targetOrg.id, trimmedAdm]
+      );
+
+      // Check if admission number belongs to another organization (cross-tenant protection)
+      if (studentQuery.rows.length === 0) {
+        const otherOrgQuery = await pool.query(
+          'SELECT organization_id FROM students WHERE LOWER(admission_number) = LOWER($1) AND organization_id IS NOT NULL AND organization_id != $2',
+          [trimmedAdm, targetOrg.id]
+        );
+        if (otherOrgQuery.rows.length > 0) {
+          return res.status(403).json({ error: 'This admission number belongs to another school or organization.' });
+        }
+      }
+    } else {
+      studentQuery = await pool.query(
+        `SELECT id, organization_id, application_id, name, admission_number,
+                TO_CHAR(dob, 'YYYY-MM-DD') AS formatted_dob,
+                class_grade, section, phone, parent_name, parent_phone, user_id, account_status
+         FROM students
+         WHERE LOWER(admission_number) = LOWER($1) LIMIT 1`,
+        [trimmedAdm]
+      );
+    }
+
+    // Determine target organization ID and application ID
+    let finalOrgId = targetOrg ? targetOrg.id : (studentQuery.rows[0]?.organization_id || 7);
+    let targetAppId = studentQuery.rows[0]?.application_id || 5;
 
     // Secure password hashing
     const passwordHash = await bcrypt.hash(password, 10);
@@ -5940,6 +6091,8 @@ app.post('/api/student/register', async (req, res) => {
 
       if (studentQuery.rows.length > 0) {
         const student = studentQuery.rows[0];
+        finalOrgId = student.organization_id || finalOrgId;
+        targetAppId = student.application_id || targetAppId;
 
         // Check if student record is already linked to an active user account
         if (student.user_id) {
@@ -5953,7 +6106,7 @@ app.post('/api/student/register', async (req, res) => {
         }
 
         // Verification Check: Compare trusted identifier Date of Birth (DOB)
-        const isDobMatch = student.formatted_dob === trimmedDob;
+        const isDobMatch = !student.formatted_dob || student.formatted_dob === trimmedDob;
 
         if (isDobMatch) {
           // Trusted verification SUCCESS: Link directly and activate
@@ -5964,7 +6117,7 @@ app.post('/api/student/register', async (req, res) => {
               $1, $2, $3, $4, $5, 'student', 'active', $6
             ) RETURNING id
           `, [
-            student.organization_id || 7,
+            finalOrgId,
             effectiveName || student.name,
             normalizedEmail,
             normalizedEmail,
@@ -5978,17 +6131,21 @@ app.post('/api/student/register', async (req, res) => {
           await client.query(`
             UPDATE students
             SET 
-              user_id = $1,
+              organization_id = COALESCE(organization_id, $1),
+              user_id = $2,
+              dob = COALESCE(dob, $3::DATE),
               account_status = 'active',
               verified_at = CURRENT_TIMESTAMP,
-              email = COALESCE(email, $2),
-              phone = COALESCE(NULLIF($3, ''), phone),
-              parent_name = COALESCE(NULLIF($4, ''), parent_name),
-              parent_phone = COALESCE(NULLIF($5, ''), parent_phone),
+              email = COALESCE(email, $4),
+              phone = COALESCE(NULLIF($5, ''), phone),
+              parent_name = COALESCE(NULLIF($6, ''), parent_name),
+              parent_phone = COALESCE(NULLIF($7, ''), parent_phone),
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = $6
+            WHERE id = $8
           `, [
+            finalOrgId,
             newUserId,
+            trimmedDob,
             normalizedEmail,
             phone ? phone.trim() : null,
             parentName ? parentName.trim() : null,
@@ -5997,7 +6154,7 @@ app.post('/api/student/register', async (req, res) => {
           ]);
 
           await client.query('COMMIT');
-          console.log(`[STUDENT REGISTER] Verified and linked student ID ${student.id} (${student.admission_number}) to user ID ${newUserId}`);
+          console.log(`[STUDENT REGISTER] Verified and linked student ID ${student.id} (${student.admission_number}) to Org ID ${finalOrgId}, user ID ${newUserId}`);
 
           return res.status(201).json({
             success: true,
@@ -6006,7 +6163,6 @@ app.post('/api/student/register', async (req, res) => {
           });
         } else {
           // Safe Pending Verification: DOB did not match existing record
-          // Do not reveal the exact student record details or mismatch reason to prevent enumeration
           const userInsert = await client.query(`
             INSERT INTO users (
               organization_id, name, username, email, password_hash, role, status, student_id
@@ -6014,7 +6170,7 @@ app.post('/api/student/register', async (req, res) => {
               $1, $2, $3, $4, $5, 'student', 'pending_verification', $6
             ) RETURNING id
           `, [
-            student.organization_id || 7,
+            finalOrgId,
             effectiveName,
             normalizedEmail,
             normalizedEmail,
@@ -6027,9 +6183,9 @@ app.post('/api/student/register', async (req, res) => {
           // Flag student record as pending verification
           await client.query(`
             UPDATE students
-            SET account_status = 'pending_verification', updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1 AND user_id IS NULL
-          `, [student.id]);
+            SET organization_id = COALESCE(organization_id, $1), account_status = 'pending_verification', updated_at = CURRENT_TIMESTAMP
+            WHERE id = $2 AND user_id IS NULL
+          `, [finalOrgId, student.id]);
 
           await client.query('COMMIT');
           console.log(`[STUDENT REGISTER] Pending verification created for user ID ${newUserId} (DOB mismatch with student ${student.id})`);
@@ -6042,14 +6198,18 @@ app.post('/api/student/register', async (req, res) => {
         }
       } else {
         // Safe Pending Verification: Admission number not found in pre-imported records
-        // Create user with status 'pending_verification' and create a provisional student record
+        // Look up application for this organization if not specified
+        const appLookup = await client.query('SELECT id FROM applications WHERE organization_id = $1 AND archived = false LIMIT 1', [finalOrgId]);
+        if (appLookup.rows.length > 0) targetAppId = appLookup.rows[0].id;
+
         const userInsert = await client.query(`
           INSERT INTO users (
             organization_id, name, username, email, password_hash, role, status
           ) VALUES (
-            7, $1, $2, $3, $4, 'student', 'pending_verification'
+            $1, $2, $3, $4, $5, 'student', 'pending_verification'
           ) RETURNING id
         `, [
+          finalOrgId,
           effectiveName,
           normalizedEmail,
           normalizedEmail,
@@ -6064,9 +6224,11 @@ app.post('/api/student/register', async (req, res) => {
             admission_number, dob, class_grade, section, parent_name, parent_phone,
             status, account_status
           ) VALUES (
-            5, 7, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Active', 'pending_verification'
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Active', 'pending_verification'
           ) RETURNING id
         `, [
+          targetAppId,
+          finalOrgId,
           newUserId,
           effectiveName,
           normalizedEmail,
@@ -6084,7 +6246,7 @@ app.post('/api/student/register', async (req, res) => {
         await client.query('UPDATE users SET student_id = $1 WHERE id = $2', [studentId, newUserId]);
 
         await client.query('COMMIT');
-        console.log(`[STUDENT REGISTER] Provisional student record created (ID ${studentId}) for user ID ${newUserId} pending admin review`);
+        console.log(`[STUDENT REGISTER] Provisional student record created (ID ${studentId}) for Org ${finalOrgId}, user ID ${newUserId} pending admin review`);
 
         return res.status(201).json({
           success: true,
@@ -6116,7 +6278,7 @@ app.post('/api/student/login', async (req, res) => {
       return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
     }
 
-    const { identifier, email, admissionNumber, username, password } = req.body;
+    const { identifier, email, admissionNumber, username, password, organizationCode, organizationId, orgCode } = req.body;
     const rawId = (identifier || email || admissionNumber || username || '').trim();
 
     if (!rawId) {
@@ -6130,9 +6292,31 @@ app.post('/api/student/login', async (req, res) => {
     const pool = getDB();
     const normalizedId = rawId.toLowerCase();
 
-    // Query student user by email, username, or linked admission number
+    // 2. Resolve organization context if provided
+    const requestedOrgCode = (organizationCode || orgCode || req.headers['x-org-code'] || '').trim();
+    const requestedOrgId = organizationId || req.headers['x-org-id'];
+    let targetOrg = null;
+
+    if (requestedOrgId && !isNaN(parseInt(requestedOrgId, 10)) && parseInt(requestedOrgId, 10) > 0) {
+      const oCheck = await pool.query('SELECT id, name, org_code, status FROM organizations WHERE id = $1', [parseInt(requestedOrgId, 10)]);
+      targetOrg = oCheck.rows[0];
+    } else if (requestedOrgCode) {
+      const oCheck = await pool.query(
+        'SELECT id, name, org_code, status FROM organizations WHERE LOWER(org_code) = LOWER($1) OR LOWER(name) = LOWER($1)',
+        [requestedOrgCode]
+      );
+      targetOrg = oCheck.rows[0];
+    }
+
+    if ((requestedOrgId || requestedOrgCode) && !targetOrg) {
+      recordFailedLogin(req);
+      return res.status(401).json({ error: 'The specified school or organization was not found.' });
+    }
+
+    // 3. Query student user by email, username, or linked admission number
     const query = `
       SELECT u.id, u.name, u.username, u.email, u.password_hash, u.role, u.status, u.student_id, u.organization_id,
+             o.name as organization_name, o.org_code as organization_code,
              s.id as linked_student_id, s.admission_number, 
              TO_CHAR(s.dob, 'YYYY-MM-DD') as dob,
              s.class_grade, s.section, s.roll_number,
@@ -6140,6 +6324,7 @@ app.post('/api/student/login', async (req, res) => {
              s.account_status, s.status as student_status,
              s.verified_at
       FROM users u
+      LEFT JOIN organizations o ON u.organization_id = o.id
       LEFT JOIN students s ON u.student_id = s.id OR u.id = s.user_id
       WHERE (LOWER(u.email) = LOWER($1) OR LOWER(u.username) = LOWER($1) OR LOWER(s.admission_number) = LOWER($1))
         AND (u.role = 'student' OR u.student_id IS NOT NULL OR s.id IS NOT NULL)
@@ -6153,6 +6338,12 @@ app.post('/api/student/login', async (req, res) => {
     if (!user) {
       recordFailedLogin(req);
       return res.status(401).json({ error: 'Invalid email, admission number, or password.' });
+    }
+
+    // 4. Validate organization membership if specified
+    if (targetOrg && user.organization_id && user.organization_id !== targetOrg.id) {
+      recordFailedLogin(req);
+      return res.status(401).json({ error: 'Invalid credentials for the selected organization.' });
     }
 
     // Check account status
@@ -6177,7 +6368,7 @@ app.post('/api/student/login', async (req, res) => {
 
     // Login successful: clear rate limits
     recordSuccessfulLogin(req);
-    console.log(`[STUDENT LOGIN] Student "${user.name}" (${user.admission_number || user.email}) logged in successfully`);
+    console.log(`[STUDENT LOGIN] Student "${user.name}" (${user.admission_number || user.email}) logged in successfully to Org ${user.organization_id}`);
 
     // Return sanitized student user object (NEVER return password_hash)
     res.json({
@@ -6192,8 +6383,11 @@ app.post('/api/student/login', async (req, res) => {
         admissionNumber: user.admission_number,
         classGrade: user.class_grade,
         section: user.section,
-        organizationId: user.organization_id || 7,
-        organization_id: user.organization_id || 7,
+        organizationId: user.organization_id || targetOrg?.id || 7,
+        organization_id: user.organization_id || targetOrg?.id || 7,
+        organizationName: user.organization_name || targetOrg?.name,
+        organizationCode: user.organization_code || targetOrg?.org_code,
+        orgCode: user.organization_code || targetOrg?.org_code,
         status: user.status,
         accountStatus: user.account_status || 'active'
       }

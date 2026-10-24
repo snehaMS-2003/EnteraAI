@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Mail, Calendar, Phone, MapPin, Globe, Shield, RefreshCw, Pencil, Check, X, Save } from 'lucide-react';
+import { Building2, Mail, Calendar, Phone, MapPin, Globe, Shield, RefreshCw, Pencil, Check, X, Save, Copy, CheckCheck } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -13,6 +13,7 @@ export function OrgProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -349,6 +350,23 @@ export function OrgProfile() {
                   </span>
                   <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded border border-white/10">
                     Org ID: {profile.id}
+                  </span>
+                  <span className="text-xs text-primary-400 font-mono font-bold bg-primary-500/10 px-2 py-0.5 rounded border border-primary-500/20 inline-flex items-center gap-1.5">
+                    Org Code: {profile.org_code || profile.orgCode || '—'}
+                    {profile.org_code && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(profile.org_code);
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 2000);
+                        }}
+                        className="hover:text-primary-300 transition-colors"
+                        title="Copy Org Code"
+                      >
+                        {copiedCode ? <CheckCheck className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    )}
                   </span>
                 </div>
               </div>

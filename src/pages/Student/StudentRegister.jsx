@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -18,18 +18,43 @@ import {
   ShieldCheck,
   Loader2,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  Building2
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 import { Card } from '../../components/ui/Card';
 import { buildApiUrl, apiFetch } from '../../utils/api';
 
 export function StudentRegister() {
   const navigate = useNavigate();
 
+  const [organizations, setOrganizations] = useState([]);
+
+  useEffect(() => {
+    apiFetch('/api/public/organizations')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setOrganizations(data);
+          // If organizations exist, preselect the first or default
+          if (data.length > 0) {
+            setFormData(prev => ({
+              ...prev,
+              organizationId: prev.organizationId || String(data[0].id),
+              organizationCode: prev.organizationCode || data[0].org_code || ''
+            }));
+          }
+        }
+      })
+      .catch((err) => console.warn('Could not fetch organizations for student register:', err));
+  }, []);
+
   // Form State
   const [formData, setFormData] = useState({
+    organizationId: '',
+    organizationCode: '',
     fullName: '',
     admissionNumber: '',
     dob: '',
@@ -65,6 +90,10 @@ export function StudentRegister() {
 
   const validate = () => {
     const errs = {};
+    if (!formData.organizationId && !formData.organizationCode) {
+      errs.organization = 'Please select your School / Organization.';
+    }
+
     if (!formData.fullName.trim()) errs.fullName = 'Full Name is required.';
     else if (formData.fullName.trim().length < 2) errs.fullName = 'Full Name must be at least 2 characters.';
 
@@ -120,6 +149,7 @@ export function StudentRegister() {
     const validationErrors = validate();
     setErrors(validationErrors);
     setTouched({
+      organization: true,
       fullName: true,
       admissionNumber: true,
       dob: true,
@@ -300,6 +330,39 @@ export function StudentRegister() {
                   1. Student Verification Details
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Organization / School Selector */}
+                  <div className="md:col-span-2">
+                    <Select
+                      id="reg-organization"
+                      name="organizationId"
+                      label="School / Organization"
+                      required
+                      value={formData.organizationId}
+                      onChange={(e) => {
+                        const orgId = e.target.value;
+                        const foundOrg = organizations.find(o => String(o.id) === String(orgId));
+                        setFormData(prev => ({
+                          ...prev,
+                          organizationId: orgId,
+                          organizationCode: foundOrg?.org_code || ''
+                        }));
+                      }}
+                      error={touched.organization ? errors.organization : ''}
+                      helperText={
+                        formData.organizationCode
+                          ? `Selected School Code: ${formData.organizationCode}`
+                          : 'Select the school where the student record is registered'
+                      }
+                    >
+                      <option value="">-- Select Your School / Organization --</option>
+                      {organizations.map((org) => (
+                        <option key={org.id} value={org.id}>
+                          {org.name} ({org.org_code || `ORG-${org.id}`})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+
                   <div>
                     <Input
                       id="reg-fullName"

@@ -10,10 +10,13 @@ import {
   Loader2,
   ShieldCheck,
   ArrowRight,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  Hash
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 import { Card } from '../../components/ui/Card';
 import { buildApiUrl, apiFetch, pingBackendWarmup } from '../../utils/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -22,8 +25,21 @@ export function StudentLogin() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
+  const [organizations, setOrganizations] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState('');
+  const [customOrgCode, setCustomOrgCode] = useState('');
+  const [orgMode, setOrgMode] = useState('select'); // 'select' | 'manual'
+
   useEffect(() => {
     pingBackendWarmup();
+    apiFetch('/api/public/organizations')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setOrganizations(data);
+        }
+      })
+      .catch(err => console.warn('Could not fetch organizations for student login:', err));
   }, []);
 
   const [identifier, setIdentifier] = useState('');
@@ -68,12 +84,28 @@ export function StudentLogin() {
     setLoading(true);
 
     try {
+      let targetOrgCode = undefined;
+      let targetOrgId = undefined;
+
+      if (orgMode === 'manual' && customOrgCode.trim()) {
+        targetOrgCode = customOrgCode.trim().toUpperCase();
+      } else if (orgMode === 'select' && selectedOrgId) {
+        targetOrgId = parseInt(selectedOrgId, 10);
+        const selectedOrg = organizations.find(o => String(o.id) === String(selectedOrgId));
+        if (selectedOrg?.org_code) {
+          targetOrgCode = selectedOrg.org_code;
+        }
+      }
+
       const response = await apiFetch('/api/student/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           identifier: identifier.trim(),
           password,
+          organizationCode: targetOrgCode || undefined,
+          orgCode: targetOrgCode || undefined,
+          organizationId: targetOrgId || undefined
         }),
       });
 
@@ -152,6 +184,58 @@ export function StudentLogin() {
             )}
 
             <form onSubmit={handleLogin} noValidate className="space-y-5">
+              {/* School / Organization Selection */}
+              <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/10 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-300 font-medium flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-primary-400" />
+                    School / Organization
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOrgMode(prev => prev === 'select' ? 'manual' : 'select')}
+                    className="text-primary-400 hover:text-primary-300 text-[11px] underline transition-colors"
+                  >
+                    {orgMode === 'select' ? 'Enter Code Manually' : 'Select from List'}
+                  </button>
+                </div>
+
+                {orgMode === 'select' ? (
+                  <Select
+                    id="student-login-org-select"
+                    value={selectedOrgId}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    className="text-xs h-9 bg-gray-900/90"
+                  >
+                    <option value="">Direct Login (Auto-Detect School)</option>
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name} ({org.org_code || `ORG-${org.id}`})
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <div className="relative">
+                    <Hash className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-500 pointer-events-none" />
+                    <Input
+                      id="student-login-org-code"
+                      placeholder="ENTER SCHOOL CODE (e.g. TECHCORP)"
+                      value={customOrgCode}
+                      onChange={(e) => setCustomOrgCode(e.target.value.toUpperCase())}
+                      className="pl-8 text-xs uppercase font-mono tracking-wider h-9"
+                    />
+                  </div>
+                )}
+
+                <p className="text-[11px] text-gray-400">
+                  {orgMode === 'select' && selectedOrgId
+                    ? `Logging into: ${organizations.find(o => String(o.id) === String(selectedOrgId))?.name || 'Selected School'}`
+                    : orgMode === 'manual' && customOrgCode.trim()
+                    ? `School code: ${customOrgCode.trim().toUpperCase()}`
+                    : 'Select your school or enter school code.'}
+                </p>
+              </div>
+
               <div className="relative">
                 <User className="absolute left-3 top-9 h-4 w-4 text-gray-500 pointer-events-none z-10" />
                 <Input

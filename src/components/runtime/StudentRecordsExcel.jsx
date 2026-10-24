@@ -36,8 +36,7 @@ import {
   Shield,
   Layers,
   Save,
-  FileText,
-  LogOut
+  FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, orgFetch } from '../../hooks/useAuth';
@@ -87,14 +86,8 @@ const DEFAULT_COLUMNS = [
 ];
 
 export function StudentRecordsExcel({ appId = 5, onRecordChange }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    if (logout) logout();
-    const isStudent = user?.role === 'student';
-    navigate(isStudent ? '/student/login' : '/login');
-  };
 
   // State
   const [students, setStudents] = useState([]);
@@ -802,19 +795,6 @@ export function StudentRecordsExcel({ appId = 5, onRecordChange }) {
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-primary-400' : ''}`} />
             </button>
-
-            <div className="h-5 w-px bg-white/10 mx-1 hidden sm:block" />
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="gap-2 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-300 font-semibold"
-              title="Sign out of Entera session"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </Button>
           </div>
         </div>
 

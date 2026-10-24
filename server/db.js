@@ -129,13 +129,22 @@ const initDB = async () => {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE SET NULL;
       ALTER TABLE organizations ADD COLUMN IF NOT EXISTS username VARCHAR(255);
+      ALTER TABLE organizations ADD COLUMN IF NOT EXISTS org_code VARCHAR(50);
       
       UPDATE users SET username = name WHERE username IS NULL OR username = '';
       UPDATE users SET username = 'admin' WHERE LOWER(email) = 'admin@gmail.com' AND (username IS NULL OR username = '' OR username = 'System Administrator');
       UPDATE organizations SET username = admin_name WHERE username IS NULL OR username = '';
       
+      -- Backfill org_code for existing organizations
+      UPDATE organizations SET org_code = 'TECHCORP' WHERE id = 7 AND (org_code IS NULL OR org_code = '');
+      UPDATE organizations SET org_code = 'XYZ' WHERE id = 9 AND (org_code IS NULL OR org_code = '');
+      UPDATE organizations SET org_code = UPPER(REGEXP_REPLACE(SUBSTRING(name FROM 1 FOR 8), '[^a-zA-Z0-9]', '', 'g'))
+      WHERE (org_code IS NULL OR org_code = '') AND LENGTH(REGEXP_REPLACE(SUBSTRING(name FROM 1 FOR 8), '[^a-zA-Z0-9]', '', 'g')) >= 2;
+      UPDATE organizations SET org_code = 'ORG-' || id WHERE org_code IS NULL OR org_code = '';
+
       CREATE INDEX IF NOT EXISTS idx_users_lower_username ON users (LOWER(username));
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_student_id ON users (student_id) WHERE student_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_organizations_org_code ON organizations (LOWER(org_code));
     `);
 
     // Password Reset Tokens Table

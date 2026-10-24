@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   BrainCircuit, Building, Mail, User, Phone, MapPin, 
-  Lock, Briefcase, Globe, Eye, EyeOff, Check, X, Loader2 
+  Lock, Briefcase, Globe, Eye, EyeOff, Check, X, Loader2,
+  Hash, Copy, CheckCheck
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -20,10 +21,14 @@ export function Register() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isOrgCodeCustomized, setIsOrgCodeCustomized] = useState(false);
+  const [createdOrgCode, setCreatedOrgCode] = useState('');
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Form Values State
   const [formData, setFormData] = useState({
     name: '',
+    orgCode: '',
     email: '',
     adminName: '',
     phone: '',
@@ -47,6 +52,7 @@ export function Register() {
   // Field Refs for auto-focusing the first invalid field
   const refs = {
     name: useRef(null),
+    orgCode: useRef(null),
     email: useRef(null),
     adminName: useRef(null),
     phone: useRef(null),
@@ -86,6 +92,17 @@ export function Register() {
         if (!trimmed) return 'Organization name is required.';
         if (trimmed.length < 2 || trimmed.length > 100) {
           return 'Organization name must contain between 2 and 100 characters.';
+        }
+        return '';
+      }
+      case 'orgCode': {
+        const trimmed = (value || '').trim();
+        if (!trimmed) return 'Organization workspace code is required.';
+        if (trimmed.length < 2 || trimmed.length > 30) {
+          return 'Organization code must be between 2 and 30 characters.';
+        }
+        if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) {
+          return 'Only alphanumeric characters, dashes, and underscores allowed.';
         }
         return '';
       }
@@ -190,11 +207,24 @@ export function Register() {
   };
 
   const handleChange = (field, value) => {
-    const updated = { ...formData, [field]: value };
+    let updated = { ...formData, [field]: value };
+
+    // Auto-derive orgCode from name unless user manually customized it
+    if (field === 'name' && !isOrgCodeCustomized) {
+      const derived = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+      updated.orgCode = derived;
+    } else if (field === 'orgCode') {
+      setIsOrgCodeCustomized(true);
+      updated.orgCode = value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30);
+    }
+
     setFormData(updated);
 
     if (touched[field]) {
-      setErrors(prev => ({ ...prev, [field]: validateField(field, value, updated) }));
+      setErrors(prev => ({ ...prev, [field]: validateField(field, updated[field], updated) }));
+    }
+    if (field === 'name' && !isOrgCodeCustomized && touched.orgCode) {
+      setErrors(prev => ({ ...prev, orgCode: validateField('orgCode', updated.orgCode, updated) }));
     }
 
     // Special case: if password changes, revalidate confirmPassword if already touched
@@ -209,7 +239,7 @@ export function Register() {
   const validateAll = () => {
     const newErrors = {};
     const fields = [
-      'name', 'email', 'adminName', 'phone', 'industry',
+      'name', 'orgCode', 'email', 'adminName', 'phone', 'industry',
       ...(formData.industry === 'other' ? ['industrySpecific'] : []),
       'website', 'address', 'county', 'state', 'district', 'city', 'pincode',
       'password', 'confirmPassword'
@@ -250,6 +280,8 @@ export function Register() {
     // Prepare normalized payload (safe trim on all text fields except password)
     const payload = {
       name: formData.name.trim(),
+      orgCode: formData.orgCode.trim().toUpperCase(),
+      organizationCode: formData.orgCode.trim().toUpperCase(),
       email: formData.email.trim().toLowerCase(),
       adminName: formData.adminName.trim(),
       fullName: formData.adminName.trim(),
@@ -277,6 +309,7 @@ export function Register() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        setCreatedOrgCode(data.organization?.org_code || payload.orgCode);
         setRegistered(true);
       } else {
         if (response.status === 502 || response.status === 503 || response.status === 504) {
@@ -317,6 +350,31 @@ export function Register() {
             {isSysAdmin ? (
               <>
                 <h2 className="text-2xl font-bold mb-4">Organization Registered!</h2>
+                <div className="my-4 p-4 rounded-xl bg-white/5 border border-white/10 text-left">
+                  <span className="text-xs uppercase tracking-wider text-gray-400 font-semibold block mb-1">
+                    Assigned Organization Code
+                  </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xl font-mono font-bold text-primary-400 tracking-wider">
+                      {createdOrgCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(createdOrgCode);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="px-2.5 py-1 text-xs rounded-lg bg-primary-500/20 text-primary-300 hover:bg-primary-500/30 flex items-center gap-1.5 transition-colors"
+                    >
+                      {copiedCode ? <CheckCheck className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copiedCode ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2">
+                    Organization members and students can use this code to access their workspace.
+                  </p>
+                </div>
                 <p className="text-gray-400 mb-8">Organization and administrator account have been created successfully in PostgreSQL.</p>
                 <Link to="/admin/dashboard/orgs">
                   <Button className="w-full">Return to Organizations</Button>
@@ -324,7 +382,32 @@ export function Register() {
               </>
             ) : (
               <>
-                <h2 className="text-2xl font-bold mb-4">Registration Successful!</h2>
+                <h2 className="text-2xl font-bold mb-2">Registration Successful!</h2>
+                <div className="my-4 p-4 rounded-xl bg-white/5 border border-white/10 text-left">
+                  <span className="text-xs uppercase tracking-wider text-gray-400 font-semibold block mb-1">
+                    Your Organization Code
+                  </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xl font-mono font-bold text-primary-400 tracking-wider">
+                      {createdOrgCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(createdOrgCode);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="px-2.5 py-1 text-xs rounded-lg bg-primary-500/20 text-primary-300 hover:bg-primary-500/30 flex items-center gap-1.5 transition-colors"
+                    >
+                      {copiedCode ? <CheckCheck className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copiedCode ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2">
+                    Save this code. Your administrators, designers, and students will use it to access your organization's workspace.
+                  </p>
+                </div>
                 <p className="text-gray-400 mb-8">Organization registered successfully. Please login with your administrator credentials to continue.</p>
                 <Link to="/login">
                   <Button className="w-full">Proceed to Login</Button>
@@ -389,6 +472,27 @@ export function Register() {
                 onBlur={() => handleBlur('name')}
                 error={touched.name ? errors.name : ''}
               />
+            </div>
+
+            {/* Organization Workspace Code */}
+            <div className="relative">
+              <Hash className="absolute left-3 top-9 h-4 w-4 text-gray-500 pointer-events-none z-10" />
+              <Input
+                ref={refs.orgCode}
+                id="reg-orgCode"
+                label="Organization Workspace Code"
+                name="orgCode"
+                required
+                className="pl-10 uppercase font-mono tracking-wider"
+                placeholder="ACME"
+                value={formData.orgCode}
+                onChange={(e) => handleChange('orgCode', e.target.value)}
+                onBlur={() => handleBlur('orgCode')}
+                error={touched.orgCode ? errors.orgCode : ''}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Unique identifier for workspace login & student portal.
+              </p>
             </div>
 
             {/* Organization Email */}

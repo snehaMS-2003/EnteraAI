@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Users, FolderKanban, Briefcase, Plus, Eye, Code, Activity, LayoutDashboard } from 'lucide-react';
+import { Users, FolderKanban, Briefcase, Plus, Eye, Code, Activity, LayoutDashboard, Copy, CheckCheck } from 'lucide-react';
 import { useAuth, orgFetch } from '../../hooks/useAuth';
 
 export function OrgAdmin() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
+  const [copiedOrgCode, setCopiedOrgCode] = useState(false);
   const [stats, setStats] = useState({
     totalApplications: 0,
     activeApplications: 0,
@@ -87,10 +88,32 @@ export function OrgAdmin() {
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Welcome, {user?.name || 'Administrator'}</h1>
-          <p className="text-gray-400">Manage your organization's applications and designers.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">Welcome, {user?.name || 'Administrator'}</h1>
+            {(orgProfile?.org_code || user?.orgCode || user?.organizationCode) && (
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-primary-500/10 border border-primary-500/20 text-xs">
+                <span className="text-gray-400">Org Code:</span>
+                <span className="font-mono font-bold text-primary-400">
+                  {orgProfile?.org_code || user?.orgCode || user?.organizationCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(orgProfile?.org_code || user?.orgCode || user?.organizationCode);
+                    setCopiedOrgCode(true);
+                    setTimeout(() => setCopiedOrgCode(false), 2000);
+                  }}
+                  className="hover:text-primary-300 text-gray-400 transition-colors"
+                  title="Copy Org Code"
+                >
+                  {copiedOrgCode ? <CheckCheck className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            )}
+          </div>
+          <p className="text-gray-400 mt-1">Manage your organization's applications and designers.</p>
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" onClick={() => navigate('/org-admin/dashboard/apps')}>
@@ -114,7 +137,9 @@ export function OrgAdmin() {
             <div>
               <p className="text-sm font-medium text-gray-400">Organization</p>
               <p className="text-lg font-bold text-white truncate max-w-[150px]" title={orgProfile?.name || user?.organizationName}>{orgProfile?.name || user?.organizationName || 'Organization'}</p>
-              <p className="text-xs text-gray-400 truncate max-w-[150px]" title={orgProfile?.admin_name || user?.name}>Admin: {orgProfile?.admin_name || user?.name || 'Administrator'}</p>
+              <p className="text-xs text-primary-400 font-mono font-medium truncate max-w-[150px]" title={`Org Code: ${orgProfile?.org_code || user?.orgCode || user?.organizationCode || '—'}`}>
+                Code: {orgProfile?.org_code || user?.orgCode || user?.organizationCode || '—'}
+              </p>
             </div>
           </div>
         </Card>
