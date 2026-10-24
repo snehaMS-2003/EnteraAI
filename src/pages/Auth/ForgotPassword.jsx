@@ -5,7 +5,7 @@ import { BrainCircuit, Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle, Shie
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
-import { buildApiUrl } from '../../utils/api';
+import { buildApiUrl, apiFetch } from '../../utils/api';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -65,7 +65,7 @@ export function ForgotPassword() {
     setLoading(true);
 
     try {
-      const response = await fetch(buildApiUrl('/api/auth/forgot-password'), {
+      const response = await apiFetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -90,6 +90,10 @@ export function ForgotPassword() {
           setDevResetUrl(data.devResetUrl);
         }
       } else {
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          setErrorMsg('The cloud server is currently waking up from sleep. Please wait a few seconds and try again.');
+          return;
+        }
         // Backend failure or rate limiting
         const errorMessage = data?.error || 'Unable to process your request at this time. Please try again.';
         setErrorMsg(errorMessage);

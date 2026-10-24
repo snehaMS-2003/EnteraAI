@@ -36,9 +36,11 @@ import {
   Shield,
   Layers,
   Save,
-  FileText
+  FileText,
+  LogOut
 } from 'lucide-react';
-import { orgFetch } from '../../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
+import { useAuth, orgFetch } from '../../hooks/useAuth';
 import { Button } from '../ui/Button';
 
 // Sanitize strings against CSV/Excel formula injection
@@ -85,6 +87,15 @@ const DEFAULT_COLUMNS = [
 ];
 
 export function StudentRecordsExcel({ appId = 5, onRecordChange }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    if (logout) logout();
+    const isStudent = user?.role === 'student';
+    navigate(isStudent ? '/student/login' : '/login');
+  };
+
   // State
   const [students, setStudents] = useState([]);
   const [stats, setStats] = useState({ total: 0, active: 0, inactive: 0 });
@@ -344,6 +355,7 @@ export function StudentRecordsExcel({ appId = 5, onRecordChange }) {
         'Parent / Guardian Phone': sanitizeCellValue(s.parent_phone || ''),
         'Admission Date': formatDate(s.admission_date),
         'Status': s.status || 'Active',
+        'Portal Account': s.account_status || 'unregistered',
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -790,6 +802,19 @@ export function StudentRecordsExcel({ appId = 5, onRecordChange }) {
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-primary-400' : ''}`} />
             </button>
+
+            <div className="h-5 w-px bg-white/10 mx-1 hidden sm:block" />
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="gap-2 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-300 font-semibold"
+              title="Sign out of Entera session"
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </Button>
           </div>
         </div>
 
@@ -2226,9 +2251,15 @@ function ViewStudentModal({ student, onClose, onEdit }) {
           </div>
 
           <div className="bg-dark-100/60 p-3 rounded-xl border border-white/5 space-y-1">
-            <span className="text-gray-400 text-[11px] uppercase tracking-wider block">Registered At</span>
-            <span className="font-mono text-gray-300">
-              {student.created_at ? new Date(student.created_at).toLocaleDateString() : 'Active'}
+            <span className="text-gray-400 text-[11px] uppercase tracking-wider block">Student Portal Account</span>
+            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border ${
+              student.account_status === 'active' 
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                : student.account_status === 'pending_verification'
+                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                : 'bg-gray-500/10 text-gray-400 border-gray-500/20'
+            }`}>
+              {student.account_status === 'active' ? 'Active / Linked' : student.account_status === 'pending_verification' ? 'Pending Review' : 'Unregistered'}
             </span>
           </div>
         </div>

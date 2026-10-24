@@ -8,7 +8,7 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
-import { buildApiUrl } from '../../utils/api';
+import { buildApiUrl, apiFetch } from '../../utils/api';
 
 export function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -63,7 +63,7 @@ export function ResetPassword() {
       }
 
       try {
-        const response = await fetch(buildApiUrl(`/api/auth/verify-reset-token/${encodeURIComponent(tokenFromUrl)}`));
+        const response = await apiFetch(`/api/auth/verify-reset-token/${encodeURIComponent(tokenFromUrl)}`);
         const data = await response.json().catch(() => null);
 
         if (isMounted) {
@@ -181,7 +181,7 @@ export function ResetPassword() {
     setSubmitting(true);
 
     try {
-      const response = await fetch(buildApiUrl('/api/auth/reset-password'), {
+      const response = await apiFetch('/api/auth/reset-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,6 +198,10 @@ export function ResetPassword() {
       if (response.ok) {
         setResetSuccess(true);
       } else {
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          setSubmitError('The cloud server is currently waking up from sleep. Please wait a few seconds and try again.');
+          return;
+        }
         const errorMsg = data?.error || 'Failed to reset password. Please request a new reset link.';
         setSubmitError(errorMsg);
       }

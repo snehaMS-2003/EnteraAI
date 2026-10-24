@@ -13,6 +13,13 @@ import { AcceptInvite } from './pages/Auth/AcceptInvite';
 import { ForgotPassword } from './pages/Auth/ForgotPassword';
 import { ResetPassword } from './pages/Auth/ResetPassword';
 
+// Student Portal Pages
+import { StudentRegister } from './pages/Student/StudentRegister';
+import { StudentLogin } from './pages/Student/StudentLogin';
+import { StudentForgotPassword } from './pages/Student/StudentForgotPassword';
+import { StudentResetPassword } from './pages/Student/StudentResetPassword';
+import { StudentDashboard } from './pages/Student/StudentDashboard';
+
 // Dashboards
 import { AppDesigner } from './pages/Dashboards/AppDesigner';
 import { OrgAdmin } from './pages/Dashboards/OrgAdmin';
@@ -43,8 +50,13 @@ import { NotFound } from './pages/NotFound';
 
 import { AuthProvider } from './contexts/AuthContext';
 import { ApplicationProvider } from './contexts/ApplicationContext';
+import { pingBackendWarmup } from './utils/api';
 
 function App() {
+  React.useEffect(() => {
+    pingBackendWarmup();
+  }, []);
+
   return (
     <AuthProvider>
       <ApplicationProvider>
@@ -61,6 +73,14 @@ function App() {
           <Route path="/accept-invite" element={<AcceptInvite />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          
+          {/* Dedicated Student & Parent Portal Routes */}
+          <Route path="/student/login" element={<StudentLogin />} />
+          <Route path="/student/register" element={<StudentRegister />} />
+          <Route path="/student/forgot-password" element={<StudentForgotPassword />} />
+          <Route path="/student/reset-password" element={<StudentResetPassword />} />
+          <Route path="/student/dashboard" element={<StudentDashboard />} />
+          <Route path="/student/profile" element={<StudentDashboard />} />
 
           {/* Configured Application Direct Runtime Routes */}
           <Route path="/students" element={<AppRuntime directRouteSlug="students" />} />

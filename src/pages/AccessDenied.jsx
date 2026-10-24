@@ -16,6 +16,7 @@ export function AccessDenied() {
     if (role === 'org_admin') return '/org-admin/dashboard';
     if (role === 'app_admin') return '/app-admin/dashboard';
     if (role === 'designer' || role === 'lead_designer') return '/designer/dashboard';
+    if (role === 'student') return '/student/dashboard';
     if (role === 'user') return '/user/dashboard';
     return '/login';
   };

@@ -3,7 +3,7 @@
  * orgFetch — wrapper around fetch() that automatically attaches org-auth headers.
  */
 
-import { buildApiUrl } from '../utils/api';
+import { buildApiUrl, apiFetch } from '../utils/api';
 
 export { useAuth } from '../contexts/AuthContext';
 
@@ -31,7 +31,7 @@ export function orgFetch(path, options = {}) {
     if (role) headers['X-User-Role'] = role;
   }
 
-  return fetch(buildApiUrl(path), {
+  return apiFetch(path, {
     ...options,
     headers,
   });

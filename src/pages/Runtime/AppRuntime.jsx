@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   Users,
   LayoutDashboard,
-  FileSpreadsheet
+  FileSpreadsheet,
+  LogOut
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuth, orgFetch } from '../../hooks/useAuth';
@@ -37,7 +38,25 @@ export function AppRuntime({
   const { appIdentifier, pageSlug, subSlug } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    if (logout) logout();
+    const isStudent = user?.role === 'student';
+    navigate(isStudent ? '/student/login' : '/login');
+  };
+
+  const getDashboardPath = () => {
+    if (!user) return '/login';
+    const role = (user.role || '').toLowerCase();
+    if (role === 'sys_admin') return '/admin/dashboard';
+    if (role === 'org_admin') return '/org-admin/dashboard';
+    if (role === 'app_admin') return '/app-admin/dashboard';
+    if (role === 'designer' || role === 'lead_designer') return '/designer/dashboard';
+    if (role === 'student') return '/student/dashboard';
+    if (role === 'user') return '/user/dashboard';
+    return '/login';
+  };
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -451,15 +470,86 @@ export function AppRuntime({
             </div>
           </nav>
 
-          <div className="p-4 border-t border-white/10 text-center">
-            <span className="text-[11px] text-gray-400">
-              Powered by Entera AI Runtime
-            </span>
+          <div className="p-4 border-t border-white/10 space-y-2.5">
+            {user && (
+              <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white/[0.03] border border-white/5">
+                <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-primary-600 to-indigo-500 flex items-center justify-center text-white text-xs font-bold uppercase shrink-0">
+                  {user.name ? user.name.charAt(0) : 'U'}
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="text-xs font-semibold text-white truncate">{user.name || user.email}</p>
+                  <p className="text-[10px] text-gray-400 capitalize truncate font-mono">
+                    {user.role ? user.role.replace('_', ' ') : 'User'}
+                  </p>
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl text-red-400 hover:bg-red-500/10 border border-red-500/20 hover:border-red-500/40 transition-colors"
+              title="Sign out of Entera session"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Logout</span>
+            </button>
+            <div className="text-center pt-0.5">
+              <span className="text-[10px] text-gray-500">
+                Powered by Entera AI Runtime
+              </span>
+            </div>
           </div>
         </aside>
 
-        {/* Application Page Viewport */}
-        <main className="flex-1 overflow-y-auto bg-dark-400/30 p-8">
+        {/* Application Page Viewport and Header */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Top Navbar Header */}
+          <header className="h-14 border-b border-white/10 bg-dark-300/80 backdrop-blur-md px-6 flex items-center justify-between shrink-0 z-20">
+            <div className="flex items-center gap-3 truncate">
+              <span className="text-xs font-semibold text-gray-300 truncate">
+                {application.name}
+              </span>
+              <span className="text-gray-600">/</span>
+              <span className="text-xs font-medium text-primary-400 truncate">
+                {activePage?.title || activePage?.name || 'Student Records'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {user && (
+                <Link
+                  to={getDashboardPath()}
+                  className="hidden sm:flex items-center gap-1.5 text-xs text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                >
+                  <Home className="h-3.5 w-3.5 text-primary-400" />
+                  <span>Dashboard</span>
+                </Link>
+              )}
+
+              {user && (
+                <div className="hidden md:flex items-center gap-2 pl-2 border-l border-white/10 text-xs">
+                  <div className="h-6 w-6 rounded-lg bg-gradient-to-tr from-primary-600 to-indigo-500 text-white font-bold flex items-center justify-center text-[10px]">
+                    {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <span className="text-gray-300 font-medium truncate max-w-[120px]">{user.name || user.email}</span>
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="h-8 px-3 text-xs gap-1.5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-300"
+                title="Sign out of current account"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Logout</span>
+              </Button>
+            </div>
+          </header>
+
+          {/* Application Page Viewport */}
+          <main className="flex-1 overflow-y-auto bg-dark-400/30 p-8">
           <div className="max-w-6xl mx-auto space-y-6">
             {/* If Page Not Found */}
             {!activePage ? (
@@ -526,6 +616,7 @@ export function AppRuntime({
           </div>
         </main>
       </div>
+    </div>
 
       {/* Add Student Modal */}
       {showAddModal && (

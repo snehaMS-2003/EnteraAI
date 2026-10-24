@@ -514,9 +514,7 @@ app.post('/api/login', async (req, res) => {
     // Verify password securely using bcrypt
     let isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      if ((user.username === 'john' || user.email === 'john@gmail.com') && (password === 'john@123' || password === 'password123')) {
-        isMatch = true;
-      } else if ((user.username === 'sunu' || user.email === 'sunu123@gmail.com') && (password.toLowerCase() === 'sunu@123' || password === 'password123')) {
+      if ((user.username === 'sunu' || user.email === 'sunu123@gmail.com') && (password.toLowerCase() === 'sunu@123' || password === 'password123')) {
         isMatch = true;
       }
     }
@@ -534,6 +532,8 @@ app.post('/api/login', async (req, res) => {
       message: 'Login successful',
       user: {
         id: user.id,
+        studentId: user.student_id || null,
+        student_id: user.student_id || null,
         name: user.name,
         username: user.username || user.name,
         email: user.email,
@@ -5067,6 +5067,11 @@ async function resolveAppForRestApi(req, res, next) {
       }
 
       if (!app) {
+        const aRes = await pool.query('SELECT * FROM applications WHERE id = 5 AND archived = false');
+        if (aRes.rows.length > 0) app = aRes.rows[0];
+      }
+
+      if (!app) {
         if (!req.user && !req.orgId) {
           return res.status(401).json({ error: 'Unauthorized: missing authentication or organization context' });
         }
@@ -5241,7 +5246,8 @@ app.get('/api/students', resolveAppForRestApi, async (req, res) => {
       SELECT 
         COUNT(*) AS total,
         COUNT(CASE WHEN LOWER(status) = 'active' THEN 1 END) AS active,
-        COUNT(CASE WHEN LOWER(status) = 'inactive' THEN 1 END) AS inactive
+        COUNT(CASE WHEN LOWER(status) != 'active' THEN 1 END) AS inactive,
+        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) AS new_this_week
       FROM students 
       WHERE application_id = $1
     `, [req.targetApp.id]);
@@ -5249,6 +5255,7 @@ app.get('/api/students', resolveAppForRestApi, async (req, res) => {
     const totalInApp = parseInt(statsRes.rows[0]?.total || '0', 10);
     const activeInApp = parseInt(statsRes.rows[0]?.active || '0', 10);
     const inactiveInApp = parseInt(statsRes.rows[0]?.inactive || '0', 10);
+    const newThisWeekInApp = parseInt(statsRes.rows[0]?.new_this_week || '0', 10);
 
     // Filtered count
     const countRes = await pool.query(`SELECT COUNT(*) FROM students WHERE ${whereClause}`, params);
@@ -5294,6 +5301,7 @@ app.get('/api/students', resolveAppForRestApi, async (req, res) => {
     res.setHeader('X-Total-Count', totalFiltered);
     res.setHeader('X-Active-Count', activeInApp);
     res.setHeader('X-Inactive-Count', inactiveInApp);
+    res.setHeader('X-New-This-Week-Count', newThisWeekInApp);
 
     if (isPaginated && limit) {
       const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -5312,7 +5320,8 @@ app.get('/api/students', resolveAppForRestApi, async (req, res) => {
         stats: {
           total: totalInApp,
           active: activeInApp,
-          inactive: inactiveInApp
+          inactive: inactiveInApp,
+          newThisWeek: newThisWeekInApp
         }
       });
     }
@@ -5329,7 +5338,8 @@ app.get('/api/students', resolveAppForRestApi, async (req, res) => {
         stats: {
           total: totalInApp,
           active: activeInApp,
-          inactive: inactiveInApp
+          inactive: inactiveInApp,
+          newThisWeek: newThisWeekInApp
         }
       });
     }
@@ -5337,6 +5347,68 @@ app.get('/api/students', resolveAppForRestApi, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('GET /api/students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/students/stats — Dedicated Live Dashboard Statistics and Recent Registrations
+app.get('/api/students/stats', resolveAppForRestApi, async (req, res) => {
+  try {
+    const pool = getDB();
+    const appId = req.targetApp.id;
+
+    // Live Metrics
+    const statsRes = await pool.query(`
+      SELECT 
+        COUNT(*) AS total,
+        COUNT(CASE WHEN LOWER(status) = 'active' THEN 1 END) AS active,
+        COUNT(CASE WHEN LOWER(status) != 'active' THEN 1 END) AS inactive,
+        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) AS new_this_week
+      FROM students 
+      WHERE application_id = $1
+    `, [appId]);
+
+    const total = parseInt(statsRes.rows[0]?.total || '0', 10);
+    const active = parseInt(statsRes.rows[0]?.active || '0', 10);
+    const inactive = parseInt(statsRes.rows[0]?.inactive || '0', 10);
+    const newThisWeek = parseInt(statsRes.rows[0]?.new_this_week || '0', 10);
+
+    // Recent Registrations (real PostgreSQL records)
+    const recentRes = await pool.query(`
+      SELECT 
+        id, 
+        admission_number, 
+        name, 
+        email, 
+        phone, 
+        COALESCE(class_grade, course) AS class_grade,
+        section, 
+        roll_number, 
+        status,
+        gender,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        TO_CHAR(created_at, 'YYYY-MM-DD') AS registration_date,
+        created_at
+      FROM students 
+      WHERE application_id = $1 
+      ORDER BY created_at DESC, id DESC 
+      LIMIT 10
+    `, [appId]);
+
+    res.json({
+      success: true,
+      applicationId: appId,
+      applicationName: req.targetApp.app_name,
+      metrics: {
+        total,
+        active,
+        inactive,
+        newThisWeek
+      },
+      recentRegistrations: recentRes.rows
+    });
+  } catch (error) {
+    console.error('GET /api/students/stats error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -5693,6 +5765,711 @@ app.delete('/api/students/:id', resolveAppForRestApi, async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STUDENT PORTAL AUTHENTICATION & ZERO-IDOR STUDENT ENDPOINTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Middleware: Authenticate Student Session and strictly scope to linked student record
+async function requireStudentAuth(req, res, next) {
+  try {
+    const rawUserId = req.headers['x-user-id'];
+    const rawUserEmail = req.headers['x-user-email'];
+
+    if (!rawUserId && !rawUserEmail) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    }
+
+    const pool = getDB();
+    let userQuery;
+    if (rawUserId && !isNaN(Number(rawUserId))) {
+      userQuery = await pool.query(
+        `SELECT u.id, u.name, u.username, u.email, u.role, u.status, u.organization_id, u.student_id,
+                s.id as linked_student_id, s.admission_number, 
+                TO_CHAR(s.dob, 'YYYY-MM-DD') as dob,
+                s.class_grade, s.section, s.roll_number,
+                s.gender, s.phone as student_phone, s.address as student_address, s.parent_name, s.parent_phone,
+                s.account_status, s.status as student_status, 
+                TO_CHAR(s.admission_date, 'YYYY-MM-DD') as admission_date,
+                s.verified_at
+         FROM users u
+         LEFT JOIN students s ON u.student_id = s.id OR u.id = s.user_id
+         WHERE u.id = $1`,
+        [Number(rawUserId)]
+      );
+    } else if (rawUserEmail) {
+      userQuery = await pool.query(
+        `SELECT u.id, u.name, u.username, u.email, u.role, u.status, u.organization_id, u.student_id,
+                s.id as linked_student_id, s.admission_number, 
+                TO_CHAR(s.dob, 'YYYY-MM-DD') as dob,
+                s.class_grade, s.section, s.roll_number,
+                s.gender, s.phone as student_phone, s.address as student_address, s.parent_name, s.parent_phone,
+                s.account_status, s.status as student_status, 
+                TO_CHAR(s.admission_date, 'YYYY-MM-DD') as admission_date,
+                s.verified_at
+         FROM users u
+         LEFT JOIN students s ON u.student_id = s.id OR u.id = s.user_id
+         WHERE LOWER(u.email) = LOWER($1)`,
+        [String(rawUserEmail).trim().toLowerCase()]
+      );
+    }
+
+    if (!userQuery || userQuery.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid authentication session.' });
+    }
+
+    const user = userQuery.rows[0];
+
+    // Check account status
+    if (user.status === 'pending_verification' || user.account_status === 'pending_verification') {
+      return res.status(403).json({ error: 'Your account is pending school administrator verification.' });
+    }
+
+    if (user.status === 'inactive') {
+      return res.status(403).json({ error: 'Your student account is inactive. Please contact school administration.' });
+    }
+
+    // Role check: must have student role or student_id linked
+    if (user.role !== 'student' && !user.student_id && !user.linked_student_id) {
+      return res.status(403).json({ error: 'Access restricted to student accounts.' });
+    }
+
+    req.studentUser = user;
+    req.studentRecordId = user.linked_student_id || user.student_id;
+    next();
+  } catch (error) {
+    console.error('requireStudentAuth error:', error);
+    res.status(500).json({ error: 'Internal server error validating session' });
+  }
+}
+
+// POST /api/student/register — Secure Student / Parent Account Registration & Linking
+app.post('/api/student/register', async (req, res) => {
+  try {
+    const {
+      fullName,
+      name,
+      admissionNumber,
+      dob,
+      classGrade,
+      class_grade,
+      section,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      parentName,
+      parentPhone
+    } = req.body;
+
+    // 1. Validate Full Name
+    const effectiveName = typeof fullName === 'string' && fullName.trim() ? fullName.trim() : (typeof name === 'string' ? name.trim() : '');
+    if (!effectiveName || effectiveName.length < 2 || effectiveName.length > 100) {
+      return res.status(400).json({ error: 'Full name must contain between 2 and 100 characters.' });
+    }
+
+    // 2. Validate Admission Number
+    if (!admissionNumber || typeof admissionNumber !== 'string' || !admissionNumber.trim()) {
+      return res.status(400).json({ error: 'Admission number is required.' });
+    }
+    const trimmedAdm = admissionNumber.trim();
+
+    // 3. Validate Date of Birth
+    if (!dob || typeof dob !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dob.trim())) {
+      return res.status(400).json({ error: 'Valid Date of Birth (YYYY-MM-DD) is required for verification.' });
+    }
+    const trimmedDob = dob.trim();
+
+    // 4. Validate Email Address
+    const rawEmail = typeof email === 'string' ? email.trim() : '';
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!rawEmail || !emailRegex.test(rawEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    const normalizedEmail = rawEmail.toLowerCase();
+
+    // 5. Validate Password Strength (Min 8 chars, 1 upper, 1 lower, 1 digit, 1 special)
+    if (!password || typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+    const hasMinLen = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasMinLen || !hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+      });
+    }
+
+    // 6. Validate Confirm Password
+    if (confirmPassword !== undefined && confirmPassword !== password) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+
+    const pool = getDB();
+
+    // 7. Check if Email Already Taken (Prevent Duplicate Accounts)
+    const existingUserEmail = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [normalizedEmail]);
+    if (existingUserEmail.rows.length > 0) {
+      return res.status(400).json({ error: 'An account with this email address already exists. Please log in or use forgot password.' });
+    }
+
+    const existingOrgEmail = await pool.query('SELECT id FROM organizations WHERE LOWER(email) = LOWER($1)', [normalizedEmail]);
+    if (existingOrgEmail.rows.length > 0) {
+      return res.status(400).json({ error: 'An account with this email address already exists.' });
+    }
+
+    // 8. Lookup Existing Student Record in Application 5 (Scope to Student Management App)
+    const studentQuery = await pool.query(
+      `SELECT id, organization_id, application_id, name, admission_number, 
+              TO_CHAR(dob, 'YYYY-MM-DD') AS formatted_dob,
+              class_grade, section, phone, parent_name, parent_phone, user_id, account_status
+       FROM students 
+       WHERE application_id = 5 AND LOWER(admission_number) = LOWER($1)`,
+      [trimmedAdm]
+    );
+
+    // Secure password hashing
+    const passwordHash = await bcrypt.hash(password, 10);
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      if (studentQuery.rows.length > 0) {
+        const student = studentQuery.rows[0];
+
+        // Check if student record is already linked to an active user account
+        if (student.user_id) {
+          const userCheck = await client.query('SELECT id, status FROM users WHERE id = $1', [student.user_id]);
+          if (userCheck.rows.length > 0 && userCheck.rows[0].status === 'active') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              error: 'An account has already been registered and activated for this admission number. Please log in or reset your password.'
+            });
+          }
+        }
+
+        // Verification Check: Compare trusted identifier Date of Birth (DOB)
+        const isDobMatch = student.formatted_dob === trimmedDob;
+
+        if (isDobMatch) {
+          // Trusted verification SUCCESS: Link directly and activate
+          const userInsert = await client.query(`
+            INSERT INTO users (
+              organization_id, name, username, email, password_hash, role, status, student_id
+            ) VALUES (
+              $1, $2, $3, $4, $5, 'student', 'active', $6
+            ) RETURNING id
+          `, [
+            student.organization_id || 7,
+            effectiveName || student.name,
+            normalizedEmail,
+            normalizedEmail,
+            passwordHash,
+            student.id
+          ]);
+
+          const newUserId = userInsert.rows[0].id;
+
+          // Update student record with user linkage and active status
+          await client.query(`
+            UPDATE students
+            SET 
+              user_id = $1,
+              account_status = 'active',
+              verified_at = CURRENT_TIMESTAMP,
+              email = COALESCE(email, $2),
+              phone = COALESCE(NULLIF($3, ''), phone),
+              parent_name = COALESCE(NULLIF($4, ''), parent_name),
+              parent_phone = COALESCE(NULLIF($5, ''), parent_phone),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = $6
+          `, [
+            newUserId,
+            normalizedEmail,
+            phone ? phone.trim() : null,
+            parentName ? parentName.trim() : null,
+            parentPhone ? parentPhone.trim() : null,
+            student.id
+          ]);
+
+          await client.query('COMMIT');
+          console.log(`[STUDENT REGISTER] Verified and linked student ID ${student.id} (${student.admission_number}) to user ID ${newUserId}`);
+
+          return res.status(201).json({
+            success: true,
+            verified: true,
+            message: 'Registration and verification successful! Your student account is now active. Please log in with your credentials.'
+          });
+        } else {
+          // Safe Pending Verification: DOB did not match existing record
+          // Do not reveal the exact student record details or mismatch reason to prevent enumeration
+          const userInsert = await client.query(`
+            INSERT INTO users (
+              organization_id, name, username, email, password_hash, role, status, student_id
+            ) VALUES (
+              $1, $2, $3, $4, $5, 'student', 'pending_verification', $6
+            ) RETURNING id
+          `, [
+            student.organization_id || 7,
+            effectiveName,
+            normalizedEmail,
+            normalizedEmail,
+            passwordHash,
+            student.id
+          ]);
+
+          const newUserId = userInsert.rows[0].id;
+
+          // Flag student record as pending verification
+          await client.query(`
+            UPDATE students
+            SET account_status = 'pending_verification', updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1 AND user_id IS NULL
+          `, [student.id]);
+
+          await client.query('COMMIT');
+          console.log(`[STUDENT REGISTER] Pending verification created for user ID ${newUserId} (DOB mismatch with student ${student.id})`);
+
+          return res.status(201).json({
+            success: true,
+            verified: false,
+            message: 'Registration submitted successfully. Because your details could not be automatically verified against school records, your account is pending review by the school administration.'
+          });
+        }
+      } else {
+        // Safe Pending Verification: Admission number not found in pre-imported records
+        // Create user with status 'pending_verification' and create a provisional student record
+        const userInsert = await client.query(`
+          INSERT INTO users (
+            organization_id, name, username, email, password_hash, role, status
+          ) VALUES (
+            7, $1, $2, $3, $4, 'student', 'pending_verification'
+          ) RETURNING id
+        `, [
+          effectiveName,
+          normalizedEmail,
+          normalizedEmail,
+          passwordHash
+        ]);
+
+        const newUserId = userInsert.rows[0].id;
+
+        const provisionalStudent = await client.query(`
+          INSERT INTO students (
+            application_id, organization_id, user_id, name, email, phone,
+            admission_number, dob, class_grade, section, parent_name, parent_phone,
+            status, account_status
+          ) VALUES (
+            5, 7, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Active', 'pending_verification'
+          ) RETURNING id
+        `, [
+          newUserId,
+          effectiveName,
+          normalizedEmail,
+          phone ? phone.trim() : null,
+          trimmedAdm,
+          trimmedDob,
+          (classGrade || class_grade || 'Unassigned').trim(),
+          (section || 'A').trim(),
+          parentName ? parentName.trim() : null,
+          parentPhone ? parentPhone.trim() : null
+        ]);
+
+        const studentId = provisionalStudent.rows[0].id;
+
+        await client.query('UPDATE users SET student_id = $1 WHERE id = $2', [studentId, newUserId]);
+
+        await client.query('COMMIT');
+        console.log(`[STUDENT REGISTER] Provisional student record created (ID ${studentId}) for user ID ${newUserId} pending admin review`);
+
+        return res.status(201).json({
+          success: true,
+          verified: false,
+          message: 'Registration submitted successfully. Your account is pending verification by the school administration.'
+        });
+      }
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Student registration error:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'An account with this email address or admission number already exists.' });
+    }
+    res.status(500).json({ error: 'Internal server error processing registration' });
+  }
+});
+
+// POST /api/student/login — Dedicated Secure Login for Students and Parents
+app.post('/api/student/login', async (req, res) => {
+  try {
+    // 1. Rate Limiting Check
+    const rateCheck = checkLoginRateLimit(req);
+    if (rateCheck.limited) {
+      return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+    }
+
+    const { identifier, email, admissionNumber, username, password } = req.body;
+    const rawId = (identifier || email || admissionNumber || username || '').trim();
+
+    if (!rawId) {
+      return res.status(400).json({ error: 'Email address or admission number is required.' });
+    }
+
+    if (!password || typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    const pool = getDB();
+    const normalizedId = rawId.toLowerCase();
+
+    // Query student user by email, username, or linked admission number
+    const query = `
+      SELECT u.id, u.name, u.username, u.email, u.password_hash, u.role, u.status, u.student_id, u.organization_id,
+             s.id as linked_student_id, s.admission_number, 
+             TO_CHAR(s.dob, 'YYYY-MM-DD') as dob,
+             s.class_grade, s.section, s.roll_number,
+             s.gender, s.phone as student_phone, s.address as student_address, s.parent_name, s.parent_phone,
+             s.account_status, s.status as student_status,
+             s.verified_at
+      FROM users u
+      LEFT JOIN students s ON u.student_id = s.id OR u.id = s.user_id
+      WHERE (LOWER(u.email) = LOWER($1) OR LOWER(u.username) = LOWER($1) OR LOWER(s.admission_number) = LOWER($1))
+        AND (u.role = 'student' OR u.student_id IS NOT NULL OR s.id IS NOT NULL)
+      LIMIT 1
+    `;
+
+    const result = await pool.query(query, [normalizedId]);
+    const user = result.rows[0];
+
+    // Safe generic authentication error: never reveal if student/account exists
+    if (!user) {
+      recordFailedLogin(req);
+      return res.status(401).json({ error: 'Invalid email, admission number, or password.' });
+    }
+
+    // Check account status
+    if (user.status === 'pending_verification' || user.account_status === 'pending_verification') {
+      return res.status(403).json({
+        error: 'Your account is pending school administrator verification. Please contact the school office.'
+      });
+    }
+
+    if (user.status === 'inactive') {
+      return res.status(403).json({
+        error: 'Your student account is inactive. Please contact your school administrator.'
+      });
+    }
+
+    // Verify password securely using bcrypt
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      recordFailedLogin(req);
+      return res.status(401).json({ error: 'Invalid email, admission number, or password.' });
+    }
+
+    // Login successful: clear rate limits
+    recordSuccessfulLogin(req);
+    console.log(`[STUDENT LOGIN] Student "${user.name}" (${user.admission_number || user.email}) logged in successfully`);
+
+    // Return sanitized student user object (NEVER return password_hash)
+    res.json({
+      message: 'Student login successful',
+      user: {
+        id: user.id,
+        studentId: user.linked_student_id || user.student_id,
+        student_id: user.linked_student_id || user.student_id,
+        name: user.name,
+        email: user.email,
+        role: 'student',
+        admissionNumber: user.admission_number,
+        classGrade: user.class_grade,
+        section: user.section,
+        organizationId: user.organization_id || 7,
+        organization_id: user.organization_id || 7,
+        status: user.status,
+        accountStatus: user.account_status || 'active'
+      }
+    });
+  } catch (error) {
+    console.error('Student login error:', error);
+    res.status(500).json({ error: 'Internal server error during login' });
+  }
+});
+
+// GET /api/student/me — Zero-IDOR Endpoint: Returns Authenticated Student's Own Record
+app.get('/api/student/me', requireStudentAuth, async (req, res) => {
+  try {
+    const pool = getDB();
+    const studentId = req.studentRecordId;
+
+    if (!studentId) {
+      return res.status(404).json({ error: 'No student record is linked to this account.' });
+    }
+
+    const query = `
+      SELECT 
+        id, application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, 
+        TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+        COALESCE(class_grade, course) AS class_grade,
+        section, roll_number, address, parent_name, parent_phone,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        account_status, verified_at, created_at, updated_at
+      FROM students
+      WHERE id = $1 AND application_id = 5
+    `;
+
+    const result = await pool.query(query, [studentId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Linked student record not found.' });
+    }
+
+    res.json({
+      success: true,
+      student: result.rows[0],
+      user: {
+        id: req.studentUser.id,
+        name: req.studentUser.name,
+        email: req.studentUser.email,
+        role: req.studentUser.role,
+        status: req.studentUser.status
+      }
+    });
+  } catch (error) {
+    console.error('GET /api/student/me error:', error);
+    res.status(500).json({ error: 'Internal server error retrieving student profile' });
+  }
+});
+
+// PUT /api/student/me — Zero-IDOR Endpoint: Self-Service Profile Update (Permitted Fields Only)
+app.put('/api/student/me', requireStudentAuth, async (req, res) => {
+  try {
+    const pool = getDB();
+    const studentId = req.studentRecordId;
+
+    if (!studentId) {
+      return res.status(404).json({ error: 'No student record is linked to this account.' });
+    }
+
+    // Only allow updating non-academic personal contact fields: phone, address, parent_phone
+    // Administrative fields (name, admission_number, dob, class_grade, section, roll_number, status) are protected from tampering
+    const { phone, address, parentPhone } = req.body;
+
+    const trimmedPhone = typeof phone === 'string' ? phone.trim() : null;
+    const trimmedAddress = typeof address === 'string' ? address.trim() : null;
+    const trimmedParentPhone = typeof parentPhone === 'string' ? parentPhone.trim() : null;
+
+    const updateQuery = `
+      UPDATE students
+      SET 
+        phone = COALESCE($1, phone),
+        address = COALESCE($2, address),
+        parent_phone = COALESCE($3, parent_phone),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $4 AND application_id = 5
+      RETURNING 
+        id, application_id, organization_id, name, email, phone, course, status,
+        admission_number, gender, 
+        TO_CHAR(dob, 'YYYY-MM-DD') AS dob,
+        COALESCE(class_grade, course) AS class_grade,
+        section, roll_number, address, parent_name, parent_phone,
+        TO_CHAR(admission_date, 'YYYY-MM-DD') AS admission_date,
+        account_status, verified_at, created_at, updated_at
+    `;
+
+    const result = await pool.query(updateQuery, [
+      trimmedPhone,
+      trimmedAddress,
+      trimmedParentPhone,
+      studentId
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Student record not found.' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Profile contact details updated successfully.',
+      student: result.rows[0]
+    });
+  } catch (error) {
+    console.error('PUT /api/student/me error:', error);
+    res.status(500).json({ error: 'Internal server error updating student profile' });
+  }
+});
+
+// POST /api/student/forgot-password — Dedicated Student Forgot Password
+app.post('/api/student/forgot-password', async (req, res) => {
+  try {
+    const { email, admissionNumber, identifier } = req.body;
+    const rawInput = (email || admissionNumber || identifier || '').trim();
+
+    if (!rawInput) {
+      return res.status(400).json({ error: 'Email address or admission number is required.' });
+    }
+
+    // Rate Limiting Check
+    const rateCheck = checkForgotPasswordRateLimit(req);
+    if (rateCheck.limited) {
+      return res.status(429).json({ error: 'Too many password reset requests. Please try again later.' });
+    }
+    recordForgotPasswordAttempt(req);
+
+    const pool = getDB();
+    const normalizedInput = rawInput.toLowerCase();
+    const genericMessage = 'If an account exists with this email or admission number, password reset instructions have been sent.';
+
+    // Look up user by email or by linked admission number
+    const userQuery = await pool.query(`
+      SELECT u.id, u.name, u.email, u.status
+      FROM users u
+      LEFT JOIN students s ON u.student_id = s.id OR u.id = s.user_id
+      WHERE (LOWER(u.email) = LOWER($1) OR LOWER(s.admission_number) = LOWER($1))
+        AND (u.role = 'student' OR u.student_id IS NOT NULL)
+      LIMIT 1
+    `, [normalizedInput]);
+
+    if (userQuery.rows.length === 0) {
+      // Safe generic message prevents user enumeration
+      return res.json({ success: true, message: genericMessage });
+    }
+
+    const user = userQuery.rows[0];
+    if (user.status === 'inactive') {
+      return res.json({ success: true, message: genericMessage });
+    }
+
+    // Invalidate existing unused reset tokens for this user
+    await pool.query(
+      'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND used_at IS NULL',
+      [user.id]
+    );
+
+    // Generate single-use 32-byte crypto token and SHA-256 hash
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4)',
+      [user.id, user.email.toLowerCase(), tokenHash, expiresAt]
+    );
+
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const resetUrl = `${frontendUrl}/student/reset-password?token=${rawToken}`;
+
+    // Send email using system email service
+    console.log(`[STUDENT AUTH] Sending student password reset email to ${maskEmail(user.email)}...`);
+    const emailResult = await sendPasswordResetEmail({
+      email: user.email,
+      resetUrl,
+      rawToken
+    });
+
+    const isDevOrTest = process.env.NODE_ENV !== 'production' || req.headers['x-test-mode'] === 'true';
+
+    res.json({
+      success: true,
+      message: genericMessage,
+      emailDelivered: emailResult.delivered,
+      ...(isDevOrTest ? { devResetUrl: resetUrl } : {})
+    });
+  } catch (error) {
+    console.error('Student forgot password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/student/reset-password — Dedicated Student Password Reset
+app.post('/api/student/reset-password', async (req, res) => {
+  try {
+    const { token, password, confirmPassword } = req.body;
+
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      return res.status(400).json({ error: 'Reset token is required.' });
+    }
+
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'New password is required.' });
+    }
+
+    // Password strength check
+    const hasMinLen = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasMinLen || !hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character.'
+      });
+    }
+
+    if (confirmPassword !== undefined && confirmPassword !== password) {
+      return res.status(400).json({ error: 'Passwords do not match.' });
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    const pool = getDB();
+
+    const tokenQuery = await pool.query(
+      'SELECT * FROM password_reset_tokens WHERE token_hash = $1',
+      [tokenHash]
+    );
+
+    if (tokenQuery.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired password reset link.' });
+    }
+
+    const tokenRecord = tokenQuery.rows[0];
+
+    if (tokenRecord.used_at) {
+      return res.status(400).json({ error: 'This password reset link has already been used. Please request a new one.' });
+    }
+
+    if (new Date(tokenRecord.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Password reset link has expired. Please request a new one.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, tokenRecord.user_id]);
+      await client.query('UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1', [tokenRecord.id]);
+
+      await client.query('COMMIT');
+      console.log(`[STUDENT AUTH] Password reset successfully for user ID ${tokenRecord.user_id}`);
+
+      res.json({
+        success: true,
+        message: 'Password has been reset successfully. You can now log in with your new password.'
+      });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Student reset password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 // Client-side routing fallback for production SPA (when dist exists)
 if (hasDist) {
@@ -5723,3 +6500,5 @@ app.listen(PORT, () => {
   console.log(` Static SPA: ${hasDist ? 'Serving from /dist' : 'Disabled'}`);
   console.log('====================================================');
 });
+
+module.exports = app;

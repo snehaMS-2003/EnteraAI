@@ -12,7 +12,7 @@ import { Card } from '../../components/ui/Card';
 import { Country, State, City } from 'country-state-city';
 import { districtsByState } from '../../data/districts';
 import { citiesByDistrict } from '../../data/citiesByDistrict';
-import { buildApiUrl } from '../../utils/api';
+import { buildApiUrl, apiFetch } from '../../utils/api';
 
 export function Register() {
   const [registered, setRegistered] = useState(false);
@@ -268,18 +268,22 @@ export function Register() {
     };
 
     try {
-      const response = await fetch(buildApiUrl('/api/register'), {
+      const response = await apiFetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
         setRegistered(true);
       } else {
-        const errorText = data.error || 'Registration failed';
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          setErrorMsg('The cloud server is currently waking up from sleep. Please wait a few seconds and try again.');
+          return;
+        }
+        const errorText = data.error || 'Registration failed. Please check your information.';
         setErrorMsg(errorText);
 
         // Highlight email specifically if it's already registered
@@ -290,7 +294,7 @@ export function Register() {
       }
     } catch (error) {
       console.error('Registration request error:', error);
-      setErrorMsg('Failed to connect to backend server. Please try again.');
+      setErrorMsg('Failed to connect to backend server. Please check your network and try again.');
     } finally {
       setLoading(false);
     }

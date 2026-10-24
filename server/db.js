@@ -127,6 +127,7 @@ const initDB = async () => {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE SET NULL;
       ALTER TABLE organizations ADD COLUMN IF NOT EXISTS username VARCHAR(255);
       
       UPDATE users SET username = name WHERE username IS NULL OR username = '';
@@ -134,6 +135,7 @@ const initDB = async () => {
       UPDATE organizations SET username = admin_name WHERE username IS NULL OR username = '';
       
       CREATE INDEX IF NOT EXISTS idx_users_lower_username ON users (LOWER(username));
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_student_id ON users (student_id) WHERE student_id IS NOT NULL;
     `);
 
     // Password Reset Tokens Table
@@ -183,23 +185,6 @@ const initDB = async () => {
         PRIMARY KEY (designer_id, application_id)
       );
     `);
-
-    // Ensure default test Application Admin John exists with role 'app_admin' and is assigned to Application 5
-    const johnHash = await bcrypt.hash('john@123', 10);
-    const johnRes = await client.query(`
-      INSERT INTO users (organization_id, name, username, email, password_hash, role, status, created_at)
-      VALUES (7, 'John', 'john', 'john@gmail.com', $1, 'app_admin', 'active', CURRENT_TIMESTAMP)
-      ON CONFLICT (email) DO UPDATE SET password_hash = $1, status = 'active', role = 'app_admin', username = 'john', organization_id = 7
-      RETURNING id;
-    `, [johnHash]);
-    if (johnRes.rows.length > 0) {
-      await client.query(`
-        INSERT INTO designer_applications (designer_id, application_id)
-        VALUES ($1, 5)
-        ON CONFLICT DO NOTHING;
-      `, [johnRes.rows[0].id]);
-      console.log('Default Application Admin initialized (john@gmail.com).');
-    }
 
     // Ensure default test User Tom exists with role 'user' and is assigned to Application 5
     const tomHash = await bcrypt.hash('tom@123', 10);
@@ -402,7 +387,11 @@ const initDB = async () => {
       ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_name VARCHAR(255);
       ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_phone VARCHAR(50);
       ALTER TABLE students ADD COLUMN IF NOT EXISTS admission_date DATE;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS account_status VARCHAR(50) DEFAULT 'unregistered';
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_students_app_adm_no ON students (application_id, admission_number) WHERE admission_number IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_students_user_id ON students (user_id) WHERE user_id IS NOT NULL;
     `);
 
     // Generic Application Entities Table (Dynamic Runtime Entities)

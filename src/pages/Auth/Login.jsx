@@ -1,16 +1,21 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BrainCircuit, User, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
-import { buildApiUrl } from '../../utils/api';
+import { buildApiUrl, apiFetch, pingBackendWarmup } from '../../utils/api';
 import { useAuth } from '../../hooks/useAuth';
 
 export function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
+
+  useEffect(() => {
+    // Proactively ping backend to wake it up if idle
+    pingBackendWarmup();
+  }, []);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -103,7 +108,7 @@ export function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch(buildApiUrl('/api/login'), {
+      const response = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), email: username.trim(), password }),
@@ -135,18 +140,27 @@ export function Login() {
           window.location.href = '/app-admin/dashboard';
         } else if (role === 'designer' || role === 'lead_designer') {
           window.location.href = '/designer/dashboard';
+        } else if (role === 'student') {
+          window.location.href = '/student/dashboard';
         } else if (role === 'user') {
           window.location.href = '/user/dashboard';
         } else {
           window.location.href = '/user/dashboard';
         }
       } else {
-        // Safe generic failure message prevents account enumeration
-        setErrorMsg(data.error || 'Invalid username or password.');
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          setErrorMsg('The cloud server is waking up from sleep. Please wait a few seconds and try logging in again.');
+        } else if (response.status >= 500) {
+          setErrorMsg(data.error || 'The server encountered an error. Please try again shortly.');
+        } else if (response.status === 429) {
+          setErrorMsg(data.error || 'Too many attempts. Please wait a moment.');
+        } else {
+          setErrorMsg(data.error || 'Invalid username or password.');
+        }
       }
     } catch (err) {
       console.error('Login error:', err);
-      setErrorMsg('Unable to connect to the server. Please try again.');
+      setErrorMsg('Unable to connect to the server. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -254,9 +268,17 @@ export function Login() {
                 </Button>
               </form>
               
-              <p className="text-center text-sm text-gray-400 mt-6">
-                Don't have an account? <Link to="/register" className="text-primary-400 hover:text-primary-300">Create Organization Account</Link>
-              </p>
+              <div className="text-center text-sm text-gray-400 mt-6 space-y-2">
+                <p>
+                  Don't have an account? <Link to="/register" className="text-primary-400 hover:text-primary-300">Create Organization Account</Link>
+                </p>
+                <p className="pt-2 border-t border-white/5 text-xs">
+                  Are you a student or parent?{' '}
+                  <Link to="/student/login" className="text-primary-400 hover:text-primary-300 font-medium">
+                    Go to Student Portal →
+                  </Link>
+                </p>
+              </div>
             </Card>
           </motion.div>
         </div>
