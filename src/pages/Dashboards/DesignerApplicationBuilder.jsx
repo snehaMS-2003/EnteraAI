@@ -19,8 +19,14 @@ export function DesignerApplicationBuilder() {
   
   const [application, setApplication] = useState(null);
   const [loading, setLoading] = useState(true);
-  
-  const basePath = user?.role === 'lead_designer' ? '/lead-designer/dashboard' : '/designer/dashboard';
+  const basePath = 
+    location.pathname.startsWith('/app-admin/dashboard') ? '/app-admin/dashboard' :
+    location.pathname.startsWith('/org-admin/dashboard') ? '/org-admin/dashboard' :
+    location.pathname.startsWith('/lead-designer/dashboard') ? '/lead-designer/dashboard' :
+    user?.role === 'app_admin' ? '/app-admin/dashboard' :
+    user?.role === 'org_admin' ? '/org-admin/dashboard' :
+    user?.role === 'lead_designer' ? '/lead-designer/dashboard' :
+    '/designer/dashboard';
 
   useEffect(() => {
     const fetchApp = async () => {

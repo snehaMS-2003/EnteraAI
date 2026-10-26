@@ -210,7 +210,48 @@ If PostgreSQL connectivity fails, the endpoint returns `HTTP 503 Service Unavail
 
 ---
 
-## 9. Verification & Testing
+## 9. Verification & Automated Testing
 
-Entera's test suite is being refreshed with targeted test cases.
+Entera includes a comprehensive automated test verification suite covering all core modules, database persistence, and API runtime capabilities:
+
+```bash
+# Run the 52-step comprehensive module verification suite:
+node server/test_all_modules.cjs
+```
+
+### Test Coverage Breakdown:
+1. **Database Schema Management**:
+   - Real schema loading from PostgreSQL.
+   - Validation against illegal table naming patterns and duplicate column identifiers.
+   - Multi-table schema persistence with foreign-key referential integrity (`1:N` relationships).
+   - Reload and browser refresh persistence checks.
+2. **REST APIs & Runtime Generator**:
+   - 1-Click automated CRUD endpoint synthesizer from schema tables.
+   - Endpoint registration (`GET`, `POST`, `PUT`, `DELETE` on `/api/runtime/:id/data/:entity`).
+   - Interactive in-browser API testing console with real latency benchmarking.
+   - SSRF protection rejecting non-API and external network URLs.
+   - Live OpenAPI 3.0.3 specification JSON generation (`/openapi.json`).
+3. **Deployment Pipeline & Version Rollback**:
+   - Real-time hosting provider inspection (Entera Cloud Runtime, Vercel, Render, PostgreSQL).
+   - Multi-environment publishing (`production`, `staging`, `development`).
+   - Pre-publish validation checklist (pages, modules, schemas, APIs).
+   - Immutable snapshot generation and structured build log tracking.
+   - Atomic version rollback with revision tags (`-rXXXX`).
+4. **Application Settings & System Health Diagnostics**:
+   - Read-only infrastructure diagnostics (PostgreSQL connection pool, uptime, Node.js version, memory, rate limiting).
+   - Theme brand accent color, default route, and JSONB `app_settings` persistence.
+   - Safe double-confirmation application deletion.
+
+---
+
+## 10. External Hosting Providers Configuration (Optional)
+
+Entera functions completely out-of-the-box with the native **Entera Cloud Runtime** and PostgreSQL database. To integrate external hosting services:
+
+| Provider | Environment Variables | Description |
+| :--- | :--- | :--- |
+| **Vercel** | `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` | Connects webhooks to deploy edge bundles to Vercel. |
+| **Render** | `RENDER_API_KEY` | Triggers container-based web service deployments on Render. |
+
+*If unconfigured, the Deployments tab gracefully indicates the integration as `UNCONFIGURED` without causing errors or displaying fabricated statuses.*
 

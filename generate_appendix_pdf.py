@@ -1,0 +1,571 @@
+"""
+Generate professional PDF for Entera.ai Appendix: Core Functionality Source Code
+"""
+import os
+import subprocess
+
+PROJECT_DIR = r"c:\Users\sneha\Downloads\Entera_Project"
+OUTPUT_HTML = os.path.join(PROJECT_DIR, "appendix_report.html")
+OUTPUT_PDF = os.path.join(PROJECT_DIR, "Entera_Project_Appendix.pdf")
+CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+
+html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Entera.ai — Appendix: Core Functionality Source Code</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 14mm 16mm 14mm 16mm;
+  }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  .header {
+    border-bottom: 2px solid #3b82f6;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
+  .header h1 {
+    font-size: 20pt;
+    color: #0f172a;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .header .subtitle {
+    font-size: 11pt;
+    color: #64748b;
+  }
+  .toc {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+  .toc h3 {
+    font-size: 12pt;
+    color: #0f172a;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .toc ul {
+    list-style: none;
+    padding-left: 0;
+  }
+  .toc li {
+    font-size: 9.5pt;
+    padding: 3px 0;
+    color: #334155;
+  }
+  .toc .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #e0f2fe;
+    color: #0369a1;
+    border-radius: 4px;
+    font-size: 8pt;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .section {
+    margin-bottom: 24px;
+    page-break-inside: avoid;
+  }
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+  }
+  .section-title {
+    font-size: 13pt;
+    color: #0f172a;
+    font-weight: 700;
+  }
+  .file-tag {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 8.5pt;
+    background: #f1f5f9;
+    color: #475569;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+  }
+  .section-desc {
+    font-size: 9.5pt;
+    color: #475569;
+    margin-bottom: 10px;
+  }
+  pre {
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 8pt;
+    line-height: 1.45;
+    overflow-x: auto;
+    border: 1px solid #1e293b;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .comment { color: #94a3b8; font-style: italic; }
+  .keyword { color: #38bdf8; font-weight: 600; }
+  .string { color: #a7f3d0; }
+  .footer {
+    margin-top: 30px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 8px;
+    font-size: 8.5pt;
+    color: #94a3b8;
+    text-align: center;
+  }
+  .page-break {
+    page-break-after: always;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Entera.ai — Appendix: Core Functionality Source Code</h1>
+  <div class="subtitle">Enterprise AI Application Builder & Dynamic Runtime Platform | Technical Project Documentation</div>
+</div>
+
+<div class="toc">
+  <h3>Core Functionality Modules Included in Appendix</h3>
+  <ul>
+    <li><span class="badge">Appendix A</span> <strong>Relational Database & Isolation Constraints</strong> &mdash; <code>server/db.js</code></li>
+    <li><span class="badge">Appendix B</span> <strong>Multi-Tenant Cross-Access Prevention Middleware</strong> &mdash; <code>server/index.js</code></li>
+    <li><span class="badge">Appendix C</span> <strong>"One Organization = One Application" Constraint Engine</strong> &mdash; <code>server/index.js</code></li>
+    <li><span class="badge">Appendix D</span> <strong>Brute-Force Rate Limiting & User Authentication</strong> &mdash; <code>server/index.js</code></li>
+    <li><span class="badge">Appendix E</span> <strong>Immutable Release Snapshots & Dynamic Runtime Engine</strong> &mdash; <code>server/index.js</code></li>
+    <li><span class="badge">Appendix F</span> <strong>Client-Side Role-Based Access Control (RBAC) Guard</strong> &mdash; <code>src/components/layout/DashboardLayout.jsx</code></li>
+    <li><span class="badge">Appendix G</span> <strong>Automated Verification & Testing Suite</strong> &mdash; <code>test_rbac.py</code></li>
+  </ul>
+</div>
+
+<!-- APPENDIX A -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix A: Relational Database Schema & Constraint Definitions</div>
+    <span class="file-tag">server/db.js</span>
+  </div>
+  <div class="section-desc">
+    Establishes the PostgreSQL connection pool and configures the partial unique constraint <code>idx_one_active_app_per_org</code> to guarantee data integrity at the database layer.
+  </div>
+  <pre><code>// PostgreSQL Connection Pool & Partial Unique Constraint Configuration
+const { Pool } = require('pg');
+require('dotenv').config();
+
+const poolConfig = process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL }
+  : {
+      user: process.env.POSTGRES_USER || 'postgres',
+      host: process.env.POSTGRES_HOST || 'localhost',
+      database: process.env.POSTGRES_DB || 'entera',
+      password: process.env.POSTGRES_PASSWORD || 'password',
+      port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
+    };
+
+if (process.env.DATABASE_SSL === 'true') {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+
+const pool = new Pool(poolConfig);
+
+// Partial Unique Index: Strictly guarantees One Active Application per Organization
+await client.query(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_app_per_org 
+  ON applications (organization_id) 
+  WHERE archived = false;
+`);</code></pre>
+</div>
+
+<!-- APPENDIX B -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix B: Multi-Tenant Isolation & Authentication Middleware</div>
+    <span class="file-tag">server/index.js</span>
+  </div>
+  <div class="section-desc">
+    Enforces organizational boundary checks, validates tenant identification headers (<code>X-Org-Id</code>), ensures tenant status is active, and isolates tenant data across API routes.
+  </div>
+  <pre><code>// Multi-Tenant Isolation Middleware Guard
+async function requireOrgAuth(req, res, next) {
+  const orgId = parseInt(req.headers['x-org-id'] || req.headers['x-organization-id'], 10);
+  const userId = req.headers['x-user-id'];
+  const userEmail = req.headers['x-user-email'];
+  const userRole = req.headers['x-user-role'];
+
+  // 1. SysAdmin Privileged Bypass with strict DB verification
+  if (userRole === 'sys_admin' || userEmail === 'admin@gmail.com') {
+    try {
+      const pool = getDB();
+      const adminCheck = await pool.query(
+        "SELECT id, email, role, status FROM users WHERE (LOWER(email) = LOWER($1) OR id = $2) AND role = 'sys_admin' AND status = 'active'",
+        [userEmail || 'admin@gmail.com', isNaN(parseInt(userId, 10)) ? -1 : parseInt(userId, 10)]
+      );
+      if (adminCheck.rows.length > 0 || userEmail === 'admin@gmail.com') {
+        req.orgId = orgId || null;
+        req.userId = adminCheck.rows[0]?.id || userId || 'sysadmin';
+        req.userEmail = adminCheck.rows[0]?.email || userEmail || 'admin@gmail.com';
+        req.userRole = 'sys_admin';
+        return next();
+      }
+    } catch (err) {
+      console.error('requireOrgAuth sysadmin check error:', err);
+    }
+  }
+
+  // 2. Reject requests missing tenant context
+  if (!orgId) {
+    return res.status(401).json({ error: 'Unauthorized: missing organization context' });
+  }
+
+  try {
+    const pool = getDB();
+    const orgCheck = await pool.query('SELECT status FROM organizations WHERE id = $1', [orgId]);
+    if (orgCheck.rows.length === 0) return res.status(404).json({ error: 'Organization not found' });
+    if (orgCheck.rows[0].status === 'inactive') return res.status(403).json({ error: 'Forbidden: Organization is inactive' });
+
+    // 3. Cross-Tenant Protection: Verify user belongs to targeted organization
+    if (userEmail && userEmail !== 'admin@gmail.com') {
+      const parsedUserId = isNaN(parseInt(userId, 10)) ? -1 : parseInt(userId, 10);
+      const userCheck = await pool.query(
+        'SELECT id, role, status FROM users WHERE (id = $1 OR LOWER(email) = LOWER($2)) AND organization_id = $3',
+        [parsedUserId, userEmail, orgId]
+      );
+      if (userCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Forbidden: You do not have access to this organization' });
+      }
+      const u = userCheck.rows[0];
+      if (u.status !== 'active') return res.status(403).json({ error: 'Account is not active' });
+      req.userId = u.id;
+      req.userRole = u.role;
+    }
+
+    req.orgId = orgId;
+    req.userEmail = userEmail || 'unknown';
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error during authorization' });
+  }
+}</code></pre>
+</div>
+
+<div class="page-break"></div>
+
+<!-- APPENDIX C -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix C: Business Rule Enforcement &mdash; "One Organization = One Application"</div>
+    <span class="file-tag">server/index.js</span>
+  </div>
+  <div class="section-desc">
+    Enforces the single-active-application rule both programmatically (HTTP 409 Conflict) and handles database race-condition constraints gracefully.
+  </div>
+  <pre><code>// POST /api/org/applications — Create app scoped to authenticated tenant
+app.post('/api/org/applications', requireOrgAdmin, async (req, res) => {
+  try {
+    const { app_name, app_description, industry, industry_template, business_modules, deployment_type, status } = req.body || {};
+
+    if (!app_name) return res.status(400).json({ error: 'Application name is required' });
+
+    const pool = getDB();
+    
+    // Application-layer enforcement: check for existing active unarchived application
+    const existingApp = await pool.query(
+      'SELECT id, app_name FROM applications WHERE organization_id = $1 AND archived = false',
+      [req.orgId]
+    );
+    if (existingApp.rows.length > 0) {
+      return res.status(409).json({
+        error: 'Only one application per organization is allowed. Your organization already has an active application.',
+        application: existingApp.rows[0]
+      });
+    }
+    
+    const orgResult = await pool.query('SELECT name FROM organizations WHERE id = $1', [req.orgId]);
+    const orgName = orgResult.rows[0]?.name || null;
+
+    const result = await pool.query(
+      `INSERT INTO applications
+         (app_name, app_description, organization, organization_id, industry, industry_template,
+          business_modules, deployment_type, status, created_by, archived, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, NOW()) RETURNING *`,
+      [app_name, app_description || null, orgName, req.orgId, industry || null,
+       industry_template || null, business_modules || null, deployment_type || 'cloud', status || 'draft', req.userEmail]
+    );
+
+    res.status(201).json({ message: 'Application created successfully', application: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'Only one application per organization is allowed. Your organization already has an active application.' });
+    }
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});</code></pre>
+</div>
+
+<!-- APPENDIX D -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix D: Brute-Force Rate Limiting & User Authentication Engine</div>
+    <span class="file-tag">server/index.js</span>
+  </div>
+  <div class="section-desc">
+    Protects user endpoints from brute-force dictionary attacks using an in-memory sliding window and handles multi-role credential verification with Bcrypt.
+  </div>
+  <pre><code>// In-memory sliding-window Rate Limiter (5 attempts per 15 minutes)
+const loginAttempts = new Map();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+function checkLoginRateLimit(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = forwarded ? forwarded.split(',')[0].trim() : req.socket?.remoteAddress || req.ip || 'unknown';
+  const email = (req.body?.email || req.body?.username || '').trim().toLowerCase();
+  const key = `${ip}:${email}`;
+  const now = Date.now();
+  const record = loginAttempts.get(key);
+
+  if (record) {
+    const recentAttempts = record.attempts.filter(t => now - t < LOGIN_LOCKOUT_MS);
+    record.attempts = recentAttempts;
+    if (recentAttempts.length >= MAX_LOGIN_ATTEMPTS) {
+      const waitMinutes = Math.ceil((recentAttempts[0] + LOGIN_LOCKOUT_MS - now) / 60000);
+      return { limited: true, waitMinutes };
+    }
+  }
+  return { limited: false };
+}
+
+// POST /api/login — Multi-role authentication endpoint
+app.post('/api/login', async (req, res) => {
+  const rateLimitCheck = checkLoginRateLimit(req);
+  if (rateLimitCheck.limited) {
+    return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+  }
+
+  const { username, email, password } = req.body;
+  const identifier = (username || email || '').trim().toLowerCase();
+  if (!identifier || !password) return res.status(400).json({ error: 'Credentials required' });
+
+  const pool = getDB();
+  const userQuery = await pool.query(
+    `SELECT u.*, o.name as organization_name, o.org_code as organization_code, o.status as organization_status
+     FROM users u
+     LEFT JOIN organizations o ON u.organization_id = o.id
+     WHERE LOWER(u.username) = LOWER($1) OR LOWER(u.name) = LOWER($1) OR LOWER(u.email) = LOWER($1)`,
+    [identifier]
+  );
+  const user = userQuery.rows[0];
+  if (!user) { recordFailedLogin(req); return res.status(401).json({ error: 'Invalid username or password.' }); }
+
+  const isMatch = await bcrypt.compare(password, user.password_hash);
+  if (!isMatch) { recordFailedLogin(req); return res.status(401).json({ error: 'Invalid username or password.' }); }
+
+  recordSuccessfulLogin(req);
+  res.json({
+    message: 'Login successful',
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organization_id }
+  });
+});</code></pre>
+</div>
+
+<div class="page-break"></div>
+
+<!-- APPENDIX E -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix E: Immutable Release Snapshots & Dynamic Runtime Engine</div>
+    <span class="file-tag">server/index.js</span>
+  </div>
+  <div class="section-desc">
+    Freezes published applications into versioned JSONB configuration snapshots so running live applications are decoupled from subsequent designer drafts.
+  </div>
+  <pre><code>// Snapshot Engine: Freezes pages, schemas, and REST APIs during deployment
+app.post('/api/designer/applications/:id/publish', resolveRuntimeAuth, async (req, res) => {
+  const appId = parseInt(req.params.id, 10);
+  const pool = getDB();
+
+  const [pagesRes, schemasRes, apisRes] = await Promise.all([
+    pool.query('SELECT * FROM application_pages WHERE application_id = $1', [appId]),
+    pool.query('SELECT * FROM database_schemas WHERE application_id = $1', [appId]),
+    pool.query('SELECT * FROM apis WHERE application_id = $1', [appId])
+  ]);
+
+  const snapshot = {
+    version: '1.1',
+    publishedAt: new Date().toISOString(),
+    pages: pagesRes.rows,
+    schemas: schemasRes.rows,
+    apis: apisRes.rows
+  };
+
+  await pool.query(`
+    INSERT INTO deployments (application_id, version, status, deployment_state, config_snapshot)
+    VALUES ($1, $2, 'active', 'LIVE', $3)
+  `, [appId, '1.1', JSON.stringify(snapshot)]);
+
+  await pool.query(`
+    UPDATE applications
+    SET status = 'published', published_config = $1, updated_at = NOW()
+    WHERE id = $2
+  `, [JSON.stringify(snapshot), appId]);
+
+  res.json({ success: true, message: 'Application published successfully.' });
+});
+
+// Runtime Engine: Serves immutable snapshot to production visitors
+app.get('/api/runtime/:idOrSlug', async (req, res) => {
+  const pool = getDB();
+  const app = (await pool.query('SELECT * FROM applications WHERE id = $1', [req.params.idOrSlug])).rows[0];
+
+  if (app.status === 'published' && app.published_config) {
+    return res.json({ application: app, runtimeConfig: app.published_config, isImmutableSnapshot: true });
+  }
+  res.json({ application: app, isDraft: true });
+});</code></pre>
+</div>
+
+<!-- APPENDIX F -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix F: Frontend Role-Based Access Control (RBAC) Guard</div>
+    <span class="file-tag">src/components/layout/DashboardLayout.jsx</span>
+  </div>
+  <div class="section-desc">
+    Evaluates authenticated sessions, resolves role hierarchies (<code>sys_admin &gt; org_admin &gt; designer &gt; user</code>), and restricts unauthorized URL access.
+  </div>
+  <pre><code>import React from 'react';
+import { Outlet, Navigate, useNavigate } from 'react-router-dom';
+import { Sidebar } from './Sidebar';
+import { useAuth } from '../../hooks/useAuth';
+import { AccessDenied } from '../../pages/AccessDenied';
+
+export function DashboardLayout({ role = 'designer' }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  // 1. Authentication Check
+  if (!user) return &lt;Navigate to="/login" replace /&gt;;
+
+  // 2. Role-Based Access Evaluation Hierarchy
+  const userRole = (user.role || '').toLowerCase();
+  const routeRole = (role || '').toLowerCase();
+
+  let isAuthorized = false;
+  if (routeRole === 'sys_admin') {
+    isAuthorized = (userRole === 'sys_admin');
+  } else if (routeRole === 'org_admin') {
+    isAuthorized = (userRole === 'org_admin' || userRole === 'sys_admin');
+  } else if (routeRole === 'designer' || routeRole === 'lead_designer') {
+    isAuthorized = (userRole === 'designer' || userRole === 'lead_designer' || userRole === 'org_admin' || userRole === 'sys_admin');
+  } else if (routeRole === 'user') {
+    isAuthorized = (userRole === 'user' || userRole === 'org_admin' || userRole === 'sys_admin');
+  }
+
+  // 3. Render Access Denied component if unauthorized
+  if (!isAuthorized) return &lt;AccessDenied /&gt;;
+
+  return (
+    &lt;div className="min-h-screen flex bg-background"&gt;
+      &lt;Sidebar role={role} /&gt;
+      &lt;main className="flex-1 overflow-auto"&gt;
+        &lt;Outlet /&gt;
+      &lt;/main&gt;
+    &lt;/div&gt;
+  );
+}</code></pre>
+</div>
+
+<!-- APPENDIX G -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Appendix G: Automated RBAC Verification Test Suite</div>
+    <span class="file-tag">test_rbac.py</span>
+  </div>
+  <div class="section-desc">
+    Automates end-to-end security verification using Selenium WebDriver & Pytest to ensure direct URL navigation to unauthorized routes fails with HTTP 403 Forbidden.
+  </div>
+  <pre><code>\"\"\"
+TC_005 — Role-Based Access Control (RBAC) Automated Verification
+Validates that standard users are blocked from administrative routes.
+\"\"\"
+import pytest
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+def test_tc005_02_restricted_page_access(driver):
+    \"\"\"
+    TC_005_02: Verify that attempting to access an unauthorized route
+    (Standard User -&gt; /admin/dashboard) is rejected and displays Access Denied.
+    \"\"\"
+    wait = WebDriverWait(driver, 15)
+    login_user(driver, "tom123@gmail.com", "tom@123")
+    wait.until(lambda d: "/user/dashboard" in d.current_url)
+
+    # Attempt direct URL navigation to restricted System Admin route
+    restricted_url = "http://localhost:5173/admin/dashboard"
+    driver.get(restricted_url)
+
+    # Verify AccessDenied component is rendered
+    access_denied_heading = wait.until(
+        EC.visibility_of_element_located((By.XPATH, "//h1[contains(text(), 'Access Denied')]")),
+        message="Expected 'Access Denied' heading not displayed on restricted route"
+    )
+    assert access_denied_heading.is_displayed(), "Access Denied heading must be visible"
+
+    forbidden_badge = wait.until(
+        EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'HTTP 403 Forbidden') or contains(text(), '403')]")),
+        message="HTTP 403 Forbidden indicator not displayed"
+    )
+    assert forbidden_badge.is_displayed(), "HTTP 403 Forbidden badge must be visible"
+</code></pre>
+</div>
+
+<div class="footer">
+  Entera.ai Enterprise AI Application Builder Platform &bull; Project Documentation Appendix &bull; Generated October 2026
+</div>
+
+</body>
+</html>
+"""
+
+with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
+    f.write(html_content)
+
+print(f"Wrote HTML to {OUTPUT_HTML}")
+
+# Compile with headless Chrome
+cmd = [
+    CHROME_PATH,
+    "--headless",
+    "--disable-gpu",
+    f"--print-to-pdf={OUTPUT_PDF}",
+    "--no-pdf-header-footer",
+    OUTPUT_HTML
+]
+print("Running command:", " ".join(cmd))
+res = subprocess.run(cmd, capture_output=True, text=True)
+if res.returncode == 0:
+    print(f"Successfully generated PDF: {OUTPUT_PDF} ({os.path.getsize(OUTPUT_PDF)} bytes)")
+else:
+    print(f"Chrome PDF generation error: {res.stderr}")

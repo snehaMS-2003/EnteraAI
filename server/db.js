@@ -240,6 +240,9 @@ const initDB = async () => {
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS published_version VARCHAR(50) DEFAULT '1.0'`);
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS published_at TIMESTAMP`);
     await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS published_config JSONB`);
+    await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS theme_color VARCHAR(50) DEFAULT '#0ea5e9'`);
+    await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS default_route VARCHAR(255) DEFAULT '/'`);
+    await client.query(`ALTER TABLE applications ADD COLUMN IF NOT EXISTS app_settings JSONB DEFAULT '{}'::jsonb`);
     
     // Enforce business rule: One Organization = One Active Application
     try {
@@ -330,6 +333,8 @@ const initDB = async () => {
     await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS published_by VARCHAR(255)`);
     await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
     await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS environment VARCHAR(50) DEFAULT 'production'`);
+    await client.query(`ALTER TABLE deployments ADD COLUMN IF NOT EXISTS build_logs JSONB DEFAULT '[]'::jsonb`);
 
     // Application Pages Table (Application Builder)
     await client.query(`
