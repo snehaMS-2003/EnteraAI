@@ -15,6 +15,8 @@ import { districtsByState } from '../../data/districts';
 import { citiesByDistrict } from '../../data/citiesByDistrict';
 import { buildApiUrl, apiFetch } from '../../utils/api';
 
+const allCountries = Country.getAllCountries();
+
 export function Register() {
   const [registered, setRegistered] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -206,34 +208,41 @@ export function Register() {
     setErrors(prev => ({ ...prev, [field]: err }));
   };
 
-  const handleChange = (field, value) => {
-    let updated = { ...formData, [field]: value };
+  const handleChange = (fieldOrUpdates, maybeValue) => {
+    const updates = typeof fieldOrUpdates === 'string'
+      ? { [fieldOrUpdates]: maybeValue }
+      : fieldOrUpdates;
 
-    // Auto-derive orgCode from name unless user manually customized it
-    if (field === 'name' && !isOrgCodeCustomized) {
-      const derived = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
-      updated.orgCode = derived;
-    } else if (field === 'orgCode') {
-      setIsOrgCodeCustomized(true);
-      updated.orgCode = value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30);
-    }
+    setFormData(prev => {
+      let updated = { ...prev, ...updates };
 
-    setFormData(updated);
+      // Auto-derive orgCode from name unless user manually customized it
+      if ('name' in updates && !isOrgCodeCustomized) {
+        const derived = (updates.name || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+        updated.orgCode = derived;
+      } else if ('orgCode' in updates) {
+        setIsOrgCodeCustomized(true);
+        updated.orgCode = (updates.orgCode || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30);
+      }
 
-    if (touched[field]) {
-      setErrors(prev => ({ ...prev, [field]: validateField(field, updated[field], updated) }));
-    }
-    if (field === 'name' && !isOrgCodeCustomized && touched.orgCode) {
-      setErrors(prev => ({ ...prev, orgCode: validateField('orgCode', updated.orgCode, updated) }));
-    }
+      setErrors(prevErrors => {
+        let newErrors = { ...prevErrors };
+        Object.keys(updates).forEach(field => {
+          if (touched[field]) {
+            newErrors[field] = validateField(field, updated[field], updated);
+          }
+        });
+        if ('name' in updates && !isOrgCodeCustomized && touched.orgCode) {
+          newErrors.orgCode = validateField('orgCode', updated.orgCode, updated);
+        }
+        if ('password' in updates && touched.confirmPassword) {
+          newErrors.confirmPassword = validateField('confirmPassword', updated.confirmPassword, updated);
+        }
+        return newErrors;
+      });
 
-    // Special case: if password changes, revalidate confirmPassword if already touched
-    if (field === 'password' && touched.confirmPassword) {
-      setErrors(prev => ({
-        ...prev,
-        confirmPassword: validateField('confirmPassword', formData.confirmPassword, updated)
-      }));
-    }
+      return updated;
+    });
   };
 
   const validateAll = () => {
@@ -277,6 +286,12 @@ export function Register() {
 
     setLoading(true);
 
+    // Look up country and state names for display and DB persistence
+    const selectedCountry = Country.getCountryByCode(formData.county);
+    const selectedState = formData.county ? State.getStateByCodeAndCountry(formData.state, formData.county) : null;
+    const countryName = selectedCountry ? selectedCountry.name : formData.county;
+    const stateName = selectedState ? selectedState.name : formData.state;
+
     // Prepare normalized payload (safe trim on all text fields except password)
     const payload = {
       name: formData.name.trim(),
@@ -290,8 +305,11 @@ export function Register() {
       industrySpecific: formData.industry === 'other' ? formData.industrySpecific.trim() : null,
       website: formData.website.trim() || null,
       address: formData.address.trim(),
-      county: formData.county,
-      state: formData.state,
+      county: countryName,
+      country: countryName,
+      countryCode: formData.county,
+      state: stateName,
+      stateCode: formData.state,
       district: formData.district,
       city: formData.city,
       pincode: formData.pincode.trim(),
@@ -338,6 +356,24 @@ export function Register() {
     const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
     if (storedUser.role === 'sys_admin') isSysAdmin = true;
   } catch {}
+
+  const availableStates = formData.county ? State.getStatesOfCountry(formData.county) : [];
+  const availableDistricts = (() => {
+    if (!formData.state) return [];
+    const presets = districtsByState[formData.state];
+    if (presets && presets.length > 0) return presets;
+    return [`${formData.state} Central`];
+  })();
+  const availableCities = (() => {
+    if (!formData.state) return [];
+    if (formData.district && citiesByDistrict[formData.state]?.[formData.district]) {
+      return citiesByDistrict[formData.state][formData.district];
+    }
+    const stateCities = City.getCitiesOfState(formData.county, formData.state).map(c => c.name);
+    if (stateCities.length > 0) return stateCities;
+    if (formData.district) return [`${formData.district} City`];
+    return [];
+  })();
 
   if (registered) {
     return (
@@ -644,16 +680,18 @@ export function Register() {
                 className="pl-10"
                 value={formData.county}
                 onChange={(e) => {
-                  handleChange('county', e.target.value);
-                  handleChange('state', '');
-                  handleChange('district', '');
-                  handleChange('city', '');
+                  handleChange({
+                    county: e.target.value,
+                    state: '',
+                    district: '',
+                    city: ''
+                  });
                 }}
                 onBlur={() => handleBlur('county')}
                 error={touched.county ? errors.county : ''}
               >
                 <option value="" className="bg-gray-900 text-white">Select Country</option>
-                {Country.getAllCountries().map(c => (
+                {allCountries.map(c => (
                   <option key={c.isoCode} value={c.isoCode} className="bg-gray-900 text-white">
                     {c.name}
                   </option>
@@ -673,16 +711,18 @@ export function Register() {
                 className="pl-10"
                 value={formData.state}
                 onChange={(e) => {
-                  handleChange('state', e.target.value);
-                  handleChange('district', '');
-                  handleChange('city', '');
+                  handleChange({
+                    state: e.target.value,
+                    district: '',
+                    city: ''
+                  });
                 }}
                 onBlur={() => handleBlur('state')}
                 error={touched.state ? errors.state : ''}
                 disabled={!formData.county}
               >
                 <option value="" className="bg-gray-900 text-white">Select State</option>
-                {formData.county && State.getStatesOfCountry(formData.county).map(s => (
+                {availableStates.map(s => (
                   <option key={s.isoCode} value={s.isoCode} className="bg-gray-900 text-white">
                     {s.name}
                   </option>
@@ -702,21 +742,19 @@ export function Register() {
                 className="pl-10"
                 value={formData.district}
                 onChange={(e) => {
-                  handleChange('district', e.target.value);
-                  handleChange('city', '');
+                  handleChange({
+                    district: e.target.value,
+                    city: ''
+                  });
                 }}
                 onBlur={() => handleBlur('district')}
                 error={touched.district ? errors.district : ''}
                 disabled={!formData.state}
               >
                 <option value="" className="bg-gray-900 text-white">Select District</option>
-                {formData.state && (districtsByState[formData.state] || []).map(d => (
+                {availableDistricts.map(d => (
                   <option key={d} value={d} className="bg-gray-900 text-white">{d}</option>
                 ))}
-                {/* Fallback option if no preset districts */}
-                {formData.state && (!districtsByState[formData.state] || districtsByState[formData.state].length === 0) && (
-                  <option value={formData.state} className="bg-gray-900 text-white">{formData.state} Central</option>
-                )}
               </Select>
             </div>
 
@@ -737,18 +775,9 @@ export function Register() {
                 disabled={!formData.state}
               >
                 <option value="" className="bg-gray-900 text-white">Select City</option>
-                {formData.district && citiesByDistrict[formData.state]?.[formData.district]
-                  ? citiesByDistrict[formData.state][formData.district].map(c => (
-                      <option key={c} value={c} className="bg-gray-900 text-white">{c}</option>
-                    ))
-                  : formData.state && City.getCitiesOfState(formData.county, formData.state).map(c => (
-                      <option key={c.name} value={c.name} className="bg-gray-900 text-white">{c.name}</option>
-                    ))
-                }
-                {/* Default fallback city if none listed */}
-                {formData.district && (
-                  <option value={formData.district} className="bg-gray-900 text-white">{formData.district} City</option>
-                )}
+                {availableCities.map(c => (
+                  <option key={c} value={c} className="bg-gray-900 text-white">{c}</option>
+                ))}
               </Select>
             </div>
 

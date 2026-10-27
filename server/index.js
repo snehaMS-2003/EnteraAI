@@ -394,7 +394,7 @@ app.post(['/api/register', '/api/organizations/register'], async (req, res) => {
         address ? String(address).trim() : null,
         city ? String(city).trim() : null,
         state ? String(state).trim() : null,
-        county ? String(county).trim() : null,
+        (county || req.body.country) ? String(county || req.body.country).trim() : null,
         district ? String(district).trim() : null,
         pincode ? String(pincode).trim() : null,
         trimmedWebsite || null,
@@ -1338,7 +1338,7 @@ app.put('/api/org/profile', requireOrgAdmin, async (req, res) => {
       RETURNING *
     `, [
       name, admin_name, phone || null, industry, industry_specific || null,
-      address || null, city || null, state || null, county || null, district || null,
+      address || null, city || null, state || null, (county || req.body.country) || null, district || null,
       pincode || null, website || null, req.orgId
     ]);
 

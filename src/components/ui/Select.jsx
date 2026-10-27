@@ -18,7 +18,7 @@ const Select = React.forwardRef(({ className, label, error, required, id, childr
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
         className={cn(
-          'glass-input flex h-10 w-full px-3 py-2 text-sm bg-gray-900 transition-colors duration-200',
+          'glass-input flex h-10 w-full px-3 py-2 text-sm bg-gray-900 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
           error && 'border-red-500/80 focus:border-red-500 focus:ring-1 focus:ring-red-500/30 text-red-100',
           className
         )}
